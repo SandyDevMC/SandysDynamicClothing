@@ -1,6 +1,6 @@
 # Sandy's Dynamic Clothing
 
-A NeoForge 1.21.1 mod that adds **dynamic clothing directly to the player's skin** instead of rendering clothes as armor-style models.
+A NeoForge 1.21.1 mod that adds dynamic clothing directly to the player's skin instead of rendering clothes as armor-style models.
 
 Clothing is loaded from simple ZIP archives, equipped through Curios, and composited into the player's existing skin. This means a clothing creator can make a shirt, jacket, coat, uniform, etc. without creating a 3D armor model.
 
@@ -57,8 +57,7 @@ sandy_frak.zip
   "toughness": 0
   "layer": "outer",
   "translations": {
-    "en_us": "Sandy's Frak",
-    "ru_ru": "Фрак Сэнди"
+    "ru_ru": "Фрак Санди"
   }
 }
 ```
@@ -66,7 +65,6 @@ sandy_frak.zip
 ### Fields
 
 | Field | Required | Description |
-|---|---|---|
 | `id` | yes | Unique lowercase item ID. Use letters, numbers, `_`, `-`, `.`. |
 | `name` | yes | Fallback display name. |
 | `description` | no | Array of tooltip lines. |
@@ -116,70 +114,3 @@ accessory
 
 `slot` controls **where** the item is equipped. `layer` controls **how it is composited**. They are independent.
 
-## Localization
-
-The mod contains its own Minecraft language files:
-
-```text
-src/main/resources/assets/dynamic_clothing_system/lang/en_us.json
-src/main/resources/assets/dynamic_clothing_system/lang/ru_ru.json
-```
-
-Clothing packs can provide their own item-name translations through the `translations` object in `item.json`.
-
-## Debugging
-
-Debug logging is disabled by default for normal players.
-
-Enable it in the generated NeoForge config:
-
-```text
-config/dynamic_clothing_system-common.toml
-```
-
-Set:
-
-```toml
-debugLogging = true
-```
-
-Useful log markers include:
-
-```text
-[DCS][EQUIP]
-[DCS][SKIN]
-[DCS][CACHE]
-[DCS][RENDER]
-[DCS][NETWORK]
-```
-
-When reporting a bug, include the relevant section of `latest.log`.
-
-## Building from source
-
-```powershell
-./gradlew.bat build
-```
-
-The resulting mod JAR is produced in:
-
-```text
-build/libs/
-```
-
-Java 21 is required.
-
-## Project structure
-
-```text
-src/main/java/com/sandydev/dcs/
-├── clothing/              # clothing data, loading and Curios integration
-├── clothing/client/       # skin composition, cache and dynamic icons
-└── mixin/                 # player rendering hook
-```
-
-## License
-
-The source code is currently distributed under **All Rights Reserved**. See `LICENSE`.
-
-Minecraft, NeoForge and Curios are third-party projects and trademarks of their respective owners.
