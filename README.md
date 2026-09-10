@@ -62,22 +62,6 @@ sandy_frak.zip
 }
 ```
 
-### Fields
-
-| Field | Required | Description |
-| `id` | yes | Unique lowercase item ID. Use letters, numbers, `_`, `-`, `.`. |
-| `name` | yes | Fallback display name. |
-| `description` | no | Array of tooltip lines. |
-| `slot` | yes | Curios slot, e.g. `head`, `torso`, `legs`, `feet`. |
-| `armor` | no | Vanilla armor points added while equipped. Defaults to `0`. |
-| `toughness` | no | Vanilla armor toughness added while equipped. Defaults to `0`. |
-| `armor` | legacy | Alias for `armor`, kept for older clothing packs. |
-| `layer` | no | Visual layer. Defaults to `base`. |
-| `priority` | no | Legacy/advanced numeric ordering. Overrides `layer` when present. |
-| `texture` | no | Texture filename, defaults to `texture.png`. |
-| `icon` | no | Icon filename, defaults to `icon.png`. |
-| `translations` | no | Locale-to-name map such as `ru_ru`, `en_us`, `de_de`. |
-
 ## Clothing layers
 
 The layer is **global**: it describes visual order, not the body part. Pants can use `base`, boots can use `outer`, and so on.
