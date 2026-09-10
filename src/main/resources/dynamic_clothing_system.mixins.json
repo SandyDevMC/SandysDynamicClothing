@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.sandydev.dcs.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "refmap": "dynamic_clothing_system.refmap.json",
+  "client": [
+    "PlayerRendererMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
