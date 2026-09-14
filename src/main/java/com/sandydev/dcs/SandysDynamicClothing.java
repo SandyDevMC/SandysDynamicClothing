@@ -63,8 +63,6 @@ public class SandysDynamicClothing {
         // раньше, чем предикат вообще появится.
         ClothingSlotValidator.register();
 
-        // Без AddPackFindersEvent сгенерированные item-model JSON никогда не попадут в ModelManager.
-        modEventBus.addListener(com.sandydev.dcs.clothing.client.ClothingIconPackWriter::addPackFinders);
 
         modEventBus.addListener(this::commonSetup);
 

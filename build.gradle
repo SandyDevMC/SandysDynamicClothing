@@ -27,10 +27,19 @@ repositories {
 }
 
 base {
-    archivesName = mod_id
+    archivesName = "sandysdynamicclothing"
 }
 
-java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+// Produce a stable filename for the distributable mod jar.
+tasks.withType(Jar).configureEach {
+    archiveFileName = "sandysdynamicclothing.jar"
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
 
 runs {
     configureEach {
