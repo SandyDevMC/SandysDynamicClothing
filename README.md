@@ -10,12 +10,7 @@ Clothing is loaded from simple ZIP archives, equipped through Curios, and compos
 - Curios slots for clothing.
 - Seven simple visual layers: `under`, `shirt`, `base`, `vest`, `jacket`, `coat`, `outer`.
 - Optional legacy numeric `priority` for precise ordering.
-- Right-click a clothing item to equip it automatically.
-- Automatic replacement of an occupied clothing slot.
-- Dynamic item icons and localization.
-- Multiple clothing items can be supplied by a single ZIP archive.
-- Detailed optional debug logging for troubleshooting.
-- Clothing contributes vanilla ARMOR and ARMOR_TOUGHNESS attributes while equipped; there is no custom damage-reduction formula.
+- Multiple clothing items can be supplied by a single ZIP archive
 
 ## Requirements
 
