@@ -54,7 +54,7 @@ sandy_frak.zip
   ],
   "slot": "torso",
   "armor": 2,
-  "toughness": 0
+  "toughness": 0,
   "layer": "outer",
   "translations": {
     "ru_ru": "Фрак Санди"

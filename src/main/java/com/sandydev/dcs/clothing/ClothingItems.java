@@ -10,18 +10,13 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Превращает всё, что нашёл {@link ClothingLoader}, в настоящие зарегистрированные {@link Item}.
+ * Превращает то, что нашёл {@link ClothingLoader}, в настоящие зарегистрированные {@link Item}.
  * <p>
- * Почему это безопасно, хотя предметы заранее не описаны Java-классами (см. требование ТЗ
- * "не использовать unsafe hacks"): {@link DeferredRegister} и так проектировался для случая,
- * когда список регистрируемых объектов не известен на этапе компиляции. Единственное жёсткое
- * условие - вызовы {@code register(name, supplier)} должны произойти ДО того, как модовая шина
- * доставит {@code RegisterEvent} (это происходит один раз, сразу после того как отработают
- * конструкторы всех модов). Поэтому архитектура мода делает discovery/loading-этап
- * ({@link ClothingLoader#loadAll}) синхронным и максимально ранним - прямо в конструкторе мода,
- * до вызова {@link #registerAll(Logger)} - а сам {@link #registerAll(Logger)} тоже вызывается
- * из конструктора мода, до {@code ITEMS.register(modEventBus)}. Никакой рефлексии по "заморожен-
- * ным" реестрам, никакого форс-инжекта - обычный, штатный порядок работы DeferredRegister.
+ * Список предметов заранее не известен на этапе компиляции - именно для такого случая
+ * и существует {@link DeferredRegister}. Единственное жёсткое требование - все вызовы
+ * {@code register(name, supplier)} должны произойти до того, как модовая шина доставит
+ * {@code RegisterEvent}. Поэтому {@link ClothingLoader#loadAll} и {@link #registerAll(Logger)}
+ * вызываются синхронно из конструктора мода, до {@code ITEMS.register(modEventBus)}.
  */
 public final class ClothingItems {
 
@@ -34,9 +29,9 @@ public final class ClothingItems {
     }
 
     /**
-     * Создаёт по одному {@link ClothingItem} на каждое определение, накопленное в
-     * {@link ClothingRegistry}. Должен быть вызван после {@link ClothingLoader#loadAll}
-     * и до того как {@code ITEMS.register(modEventBus)} получит {@code RegisterEvent}.
+     * Создаёт по одному {@link ClothingItem} на каждое определение из {@link ClothingRegistry}.
+     * Вызывать после {@link ClothingLoader#loadAll} и до того, как {@code ITEMS} получит
+     * {@code RegisterEvent}.
      */
     public static void registerAll(Logger logger) {
         for (ClothingDefinition definition : ClothingRegistry.get().getAllDefinitions()) {
@@ -48,9 +43,9 @@ public final class ClothingItems {
     }
 
     /**
-     * Связывает id -> реальный {@link Item} в {@link ClothingRegistry}. Вызывать только после
-     * того, как реестр предметов гарантированно заполнен (например, из {@code FMLCommonSetupEvent}) -
-     * до этого момента {@link DeferredItem#get()} может бросить исключение.
+     * Связывает id с реальным {@link Item} в {@link ClothingRegistry}. Вызывать только когда
+     * реестр предметов уже гарантированно заполнен (например, из {@code FMLCommonSetupEvent}) -
+     * до этого момента {@link DeferredItem#get()} бросит исключение.
      */
     public static void linkAll() {
         HOLDERS.forEach((id, holder) -> ClothingRegistry.get().linkItem(id, holder.get()));

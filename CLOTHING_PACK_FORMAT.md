@@ -20,7 +20,7 @@ my_pack.zip
   "description": ["Warm outerwear"],
   "slot": "torso",
   "armor": 3,
-  "toughness": 0
+  "toughness": 0,
   "layer": "coat",
   "translations": {
     "en_us": "Winter Coat",
@@ -67,7 +67,3 @@ A single `item.json` may also contain an array of clothing definitions.
 - Normal Minecraft player-skin layout.
 - Alpha transparency is supported.
 
-
-### Legacy compatibility
-
-Older packs may continue to use `armor`; DCS treats it as an alias for `armor`. New packs should use `armor` and optionally `toughness`.

@@ -24,13 +24,12 @@ import java.nio.file.Path;
  * Генерирует обычный (loose-файловый) resource pack с иконками и моделями предметов одежды
  * в {@code .minecraft/resourcepacks/dynamic_clothing_system_dynamic/}.
  * <p>
- * Почему не через {@code AddPackFindersEvent} + кастомный {@code PackResources} (что позволило
- * бы включать пак автоматически, без действий пользователя): точная сигнатура методов
- * {@code PackResources} в 1.21.1 (getResource/listResources/getMetadataSection/location/...)
- * не может быть на 100% надёжно подтверждена без доступа к самому jar-файлу Minecraft, а ошибка
- * в ней сломала бы КОМПИЛЯЦИЮ ВСЕГО МОДА, а не только иконок. Вместо этого используется только
- * {@code java.nio.file} - ноль риска для сборки. Расплата - пользователю (или сборщику модпака)
- * пак автоматически добавляется в выбранные ресурспаки после генерации.
+ * Пак пишется на диск и подключается через штатный {@code PathPackResources}, а не через
+ * свою реализацию {@code PackResources} "в памяти" - точная сигнатура её методов в 1.21.1
+ * не гарантирована без доступа к jar-файлу самого Minecraft, и ошибка в ней сломала бы
+ * компиляцию всего мода, а не только иконок. Loose-файлы дают тот же результат (пак
+ * подключается автоматически через {@code AddPackFindersEvent}, без действий игрока),
+ * но без этого риска.
  * <p>
  * Каждый запуск игры пак перегенерируется с нуля, чтобы всегда отражать актуальное содержимое
  * {@code .minecraft/clothes/}.
@@ -177,7 +176,25 @@ public final class ClothingIconPackWriter {
     }
 
     private static String escapeJson(String value) {
-        return value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
+        StringBuilder out = new StringBuilder(value.length());
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            switch (c) {
+                case '\\' -> out.append("\\\\");
+                case '"' -> out.append("\\\"");
+                case '\n' -> out.append("\\n");
+                case '\r' -> out.append("\\r");
+                case '\t' -> out.append("\\t");
+                default -> {
+                    if (c < 0x20) {
+                        out.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        out.append(c);
+                    }
+                }
+            }
+        }
+        return out.toString();
     }
 
     private static String itemModelJson(String id) {

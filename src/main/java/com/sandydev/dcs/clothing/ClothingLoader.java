@@ -10,14 +10,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Отвечает ТОЛЬКО за сканирование {@code .minecraft/clothes/} и заполнение
- * {@link ClothingRegistry}. Никакой регистрации Item, никакого Curios, никакого рендера -
- * см. заголовок класса в архитектуре мода.
+ * Сканирует {@code .minecraft/clothes/} и наполняет {@link ClothingRegistry}.
+ * Никакой регистрации Item и никакого Curios здесь нет - только чтение архивов.
  * <p>
- * Должен быть вызван синхронно из конструктора мода, до того как
- * {@code ITEMS.register(modEventBus)} получит событие {@code RegisterEvent} - то есть
- * до того как {@link ClothingItems} начнёт создавать реальные предметы. Именно поэтому
- * загрузка полностью синхронна и происходит максимально рано.
+ * Вызывается синхронно и максимально рано из конструктора мода: {@link ClothingItems}
+ * читает {@link ClothingRegistry} для постановки предметов в очередь DeferredRegister,
+ * а это должно произойти до RegisterEvent.
  */
 public final class ClothingLoader {
 
@@ -60,7 +58,7 @@ public final class ClothingLoader {
 
                 ClothingRegistry.get().register(definition);
                 loaded++;
-                logger.info("[DynamicClothingSystem] Загружена одежда '{}' (слот={}, защита={}, слой/priority={}) из '{}'",
+                logger.info("[DynamicClothingSystem] Загружена одежда '{}' (слот={}, броня={}, твёрдость={}, priority={}) из '{}'",
                         definition.id(), definition.slot(), definition.armor(), definition.toughness(), definition.priority(),
                         definition.sourceArchive());
             }
@@ -95,6 +93,7 @@ public final class ClothingLoader {
             logger.error("[DynamicClothingSystem] Не удалось прочитать содержимое '{}': {}",
                     clothesDir, e.getMessage(), e);
         }
+        // Сортировка нужна только для стабильного, предсказуемого порядка в логах между запусками.
         result.sort((a, b) -> a.getFileName().toString().compareToIgnoreCase(b.getFileName().toString()));
         return result;
     }

@@ -3,24 +3,14 @@ package com.sandydev.dcs.clothing;
 import java.util.List;
 
 /**
- * Набор Curios-слотов "из коробки" для одежды.
+ * Слоты Curios, которые мод регистрирует "из коробки".
  * <p>
- * Это НЕ жёстко закодированный список в смысле ограничения - {@link ClothingSlotValidator}
- * работает с произвольной строкой слота из {@code item.json}. Этот класс лишь:
- * <ul>
- *     <li>служит источником правды при генерации datapack-файлов слотов
- *     (см. {@code data/dynamic_clothing_system/curios/slots/*.json} и
- *     {@code data/dynamic_clothing_system/curios/entities/players.json});</li>
- *     <li>даёт человекочитаемые константы для остального кода мода.</li>
- * </ul>
- * Чтобы добавить новый слот одежды:
- * <ol>
- *     <li>добавить {@code data/dynamic_clothing_system/curios/slots/<slot>.json};</li>
- *     <li>добавить его id в список слотов, назначенных игроку в
- *     {@code data/dynamic_clothing_system/curios/entities/players.json};</li>
- *     <li>(опционально) добавить константу сюда для читаемости.</li>
- * </ol>
- * Изменять Java-код системы валидации/композиции при этом не требуется.
+ * Это не жёсткое ограничение - {@link ClothingSlotValidator} работает с любой строкой слота
+ * из {@code item.json}, даже отсутствующей в этом списке. Константы здесь только для
+ * читаемости кода; фактический список слотов живёт в
+ * {@code data/dynamic_clothing_system/curios/slots/*.json} и
+ * {@code data/dynamic_clothing_system/curios/entities/players.json} - при добавлении нового
+ * слота их нужно править руками, этот класс сам ничего не генерирует.
  */
 public final class ClothingSlots {
 

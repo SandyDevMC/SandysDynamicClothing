@@ -24,8 +24,8 @@ import org.slf4j.Logger;
 /**
  * Точка входа мода.
  * <p>
- * Порядок вызовов в конструкторе критичен (см. комментарии внутри) - это ровно
- * "discovery/loading-этап перед регистрацией", описанный в архитектуре {@link ClothingItems}.
+ * Порядок вызовов в конструкторе важен - одежда должна быть найдена и поставлена
+ * в очередь регистрации до того, как модовая шина доставит {@code RegisterEvent}.
  */
 @Mod(SandysDynamicClothing.MODID)
 public class SandysDynamicClothing {
@@ -48,26 +48,22 @@ public class SandysDynamicClothing {
                     .build());
 
     public SandysDynamicClothing(IEventBus modEventBus, ModContainer modContainer) {
-        // 1) Discovery/loading-этап: синхронно сканируем .minecraft/clothes/*.zip и заполняем
-        //    ClothingRegistry определениями (без создания Item). Должно случиться максимально
-        //    рано - до того, как ClothingItems поставит предметы на регистрацию.
+        // Сканируем .minecraft/clothes/*.zip и заполняем ClothingRegistry определениями одежды.
+        // Это должно случиться раньше, чем ClothingItems поставит предметы в очередь регистрации.
         ClothingLoader.loadAll(LOGGER);
 
-        // 2) Ставим по одному Item на каждое найденное определение в очередь DeferredRegister -
-        //    это ещё НЕ регистрация в реестр игры, а просто заполнение очереди на неё.
+        // По одному DeferredItem на каждое найденное определение. Сама регистрация в реестр
+        // игры произойдёт позже - в момент, когда шина доставит RegisterEvent.
         ClothingItems.registerAll(LOGGER);
-
-        // 3) Подписываем DeferredRegister'ы на модовую шину - фактическая регистрация в реестр
-        //    Minecraft произойдёт позже, когда шина доставит RegisterEvent.
         ClothingItems.ITEMS.register(modEventBus);
         CREATIVE_MODE_TABS.register(modEventBus);
 
-        // Регистрируем валидатор заранее: Curios использует validators при загрузке данных слотов,
-        // поэтому предикат должен быть зарегистрирован до первого server/datapack reload.
+        // Curios использует наш валидатор при загрузке данных слотов, поэтому регистрируем
+        // его сразу, не дожидаясь commonSetup - иначе можно попасть на первый datapack reload
+        // раньше, чем предикат вообще появится.
         ClothingSlotValidator.register();
 
-        // Динамический клиентский resource pack должен быть добавлен через AddPackFindersEvent,
-        // иначе сгенерированные item-model JSON никогда не попадут в ModelManager.
+        // Без AddPackFindersEvent сгенерированные item-model JSON никогда не попадут в ModelManager.
         modEventBus.addListener(com.sandydev.dcs.clothing.client.ClothingIconPackWriter::addPackFinders);
 
         modEventBus.addListener(this::commonSetup);
@@ -78,8 +74,8 @@ public class SandysDynamicClothing {
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {
-        // Реестр предметов Minecraft к этому моменту гарантированно заполнен - можно безопасно
-        // связать id одежды -> реальный Item.
+        // К этому моменту реестр предметов Minecraft уже заполнен, можно безопасно
+        // связать id одежды с реальным Item.
         event.enqueueWork(() -> {
             ClothingItems.linkAll();
             LOGGER.info("[DynamicClothingSystem] commonSetup завершён, загружено предметов одежды: {}",

@@ -1,7 +1,8 @@
 package com.sandydev.dcs.clothing;
 
 /**
- * Logical clothing layers. Higher layers are composited later and therefore appear above lower layers.
+ * Логические слои одежды. Чем выше приоритет, тем позже слой накладывается на скин
+ * и тем выше он оказывается визуально - см. {@link com.sandydev.dcs.clothing.client.ClothingTextureComposer}.
  */
 public enum ClothingLayer {
     UNDER(10),
@@ -32,7 +33,7 @@ public enum ClothingLayer {
             case "coat", "пальто" -> COAT;
             case "outer", "top", "верхний" -> OUTER;
             default -> throw new IllegalArgumentException(
-                    "Unknown layer '" + value + "'. Allowed: under, shirt, base, vest, jacket, coat, outer");
+                    "Неизвестный layer '" + value + "'. Допустимые значения: under, shirt, base, vest, jacket, coat, outer");
         };
     }
 }

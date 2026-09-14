@@ -9,18 +9,15 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Единая точка правды о загруженной одежде во время выполнения игры.
+ * Единая точка правды о загруженной одежде: что нашли на диске и какому Item это в итоге
+ * соответствует после регистрации.
  * <p>
- * Заполняется в два этапа:
- * <ol>
- *     <li>{@link ClothingLoader} на этапе конструктора мода кладёт сюда все успешно
- *     разобранные {@link ClothingDefinition} (до срабатывания {@code RegisterEvent});</li>
- *     <li>{@link ClothingItems} во время регистрации {@code Item} связывает каждый id
- *     с созданным {@link Item} через {@link #linkItem(String, Item)}.</li>
- * </ol>
- * Сам объект - синглтон уровня мода (не датапак-регистр Minecraft), так как одежда
- * не является игровым датапак-контентом - это runtime-контент, читаемый из
- * {@code .minecraft/clothes/}, и одинаков в течение всего запуска клиента/сервера.
+ * Заполняется в два прохода: сначала {@link ClothingLoader} кладёт сюда разобранные
+ * {@link ClothingDefinition} (до RegisterEvent), затем {@link ClothingItems} связывает
+ * каждый id с уже созданным {@link Item} через {@link #linkItem(String, Item)}.
+ * <p>
+ * Это синглтон уровня мода, а не датапак-регистр Minecraft - одежда читается из
+ * {@code .minecraft/clothes/} и не зависит от датапаков/миров.
  */
 public final class ClothingRegistry {
 

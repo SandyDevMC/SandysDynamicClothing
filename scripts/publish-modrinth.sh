@@ -4,8 +4,8 @@ set -euo pipefail
 : "${MODRINTH_TOKEN:?Set MODRINTH_TOKEN}"
 : "${MODRINTH_PROJECT_ID:?Set MODRINTH_PROJECT_ID}"
 
-JAR="${1:-build/libs/dynamic_clothing_system-1.0.0-beta.1.jar}"
-VERSION="${2:-1.0.0-beta.1}"
+JAR="${1:-build/libs/dynamic_clothing_system-1.0.0-beta.3.jar}"
+VERSION="${2:-1.0.0-beta.3}"
 
 if [[ ! -f "$JAR" ]]; then
   echo "JAR not found: $JAR" >&2

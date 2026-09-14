@@ -48,10 +48,9 @@ public class ClothingItem extends Item implements ICurioItem {
     }
 
     /**
-     * Curios asks the item itself whether it can occupy a particular slot.
-     * This is intentionally checked here in addition to the datapack validator:
-     * it keeps dynamically created clothing valid even when Curios rebuilds its
-     * slot/type cache before our predicate is queried.
+     * Curios дополнительно спрашивает у самого предмета, подходит ли он под слот - это
+     * подстраховка на случай, если Curios пересобрал свой кэш типов слотов раньше, чем
+     * успел дойти до нашего datapack-валидатора.
      */
     @Override
     public boolean canEquip(SlotContext slotContext, ItemStack stack) {

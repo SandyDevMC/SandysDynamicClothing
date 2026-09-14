@@ -13,10 +13,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Общая точка доступа к "что из одежды сейчас надето на этом существе", поверх Curios.
- * <p>
- * Используется и на сервере, и на клиенте - поэтому не содержит никакого
- * клиент-специфичного кода (никакого {@code NativeImage}/{@code Minecraft.getInstance()}).
+ * Что из одежды сейчас надето на существе - тонкая обёртка над Curios.
+ * Общий код для сервера и клиента, поэтому клиентских классов (NativeImage,
+ * Minecraft.getInstance() и т.п.) здесь быть не должно.
  */
 public final class ClothingManager {
 
@@ -43,7 +42,7 @@ public final class ClothingManager {
                             () -> {
                                 if (Config.DEBUG_LOGGING.get()) {
                                     SandysDynamicClothing.LOGGER.debug(
-                                            "[DCS][EQUIP] Curios item is not registered as clothing: {}",
+                                            "[DCS][EQUIP] предмет в Curios-слоте не зарегистрирован как одежда: {}",
                                             BuiltInRegistries.ITEM.getKey(stack.getItem()));
                                 }
                             });
