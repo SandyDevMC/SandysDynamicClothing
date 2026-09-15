@@ -12,9 +12,9 @@ import java.util.List;
  * <p>
  * Работаем всегда со свежей копией оригинального скина, не накапливаем изменения между кадрами -
  * см. {@link #compose}. Слои одежды накладываются по возрастанию priority (нижний слой первым),
- * и у каждого слоя меняются только пиксели с alpha &gt; 0. Если слой одежды перекрывает пиксель
- * первого (базового) слоя скина, соответствующий пиксель второго слоя (hat/jacket/sleeve/pants
- * overlay) обнуляется по alpha, чтобы не "просвечивал" поверх одежды.
+ * и у каждого слоя меняются только пиксели с alpha &gt; 0. Перед копированием слоя
+ * очищается только соответствующий overlay старого содержимого, если одежда действительно
+ * рисует этот base-пиксель. Так overlay самой одежды не стирается.
  * <p>
  * Раскладка UV 64x64 skin-формата стабильна с версии 1.8 и не зависит от версии Curios/NeoForge:
  * для каждой из 6 частей тела прямоугольник первого слоя связан с прямоугольником второго слоя
@@ -24,19 +24,77 @@ public final class ClothingTextureComposer {
 
     private static final int SKIN_SIZE = 64;
 
-    /** Пара прямоугольников (первый слой -> второй/overlay слой) одной части тела 64x64-скина. */
+    /**
+     * Связь одного прямоугольника базового слоя с соответствующим прямоугольником
+     * overlay-слоя в стандартной 64x64 player-skin UV-развёртке.
+     *
+     * Важно: нельзя связывать целые 16x16/32x16 блоки - внутри них находятся
+     * разные грани соседних частей тела. Именно такая широкая маска была причиной
+     * случайного удаления пикселей в других местах текстуры.
+     */
     private record LayerPair(int baseX, int baseY, int w, int h, int overlayX, int overlayY) {
     }
 
+    /**
+     * Точные соответствия base -> overlay для всех шести граней каждой части тела.
+     *
+     * Формат 64x64:
+     * - head:       base  (0..23, 0..11)   -> hat    (32..55, 0..11)
+     * - torso:      base (16..39,16..31)   -> jacket (16..39,32..47)
+     * - right arm:  base (40..55,16..31)   -> sleeve (40..55,32..47)
+     * - left arm:   base (32..47,48..63)   -> sleeve (48..63,48..63)
+     * - right leg:  base  (0..15,16..31)   -> pants  (0..15,48..63)
+     * - left leg:   base (16..31,48..63)   -> pants   (0..15,48..63)
+     */
     private static final List<LayerPair> LAYER_PAIRS = List.of(
-            new LayerPair(0, 0, 32, 16, 32, 0),     // голова -> шляпа (hat)
-            new LayerPair(16, 16, 24, 16, 16, 32),  // торс -> куртка (jacket)
-            new LayerPair(40, 16, 16, 16, 40, 32),  // правая рука -> правый рукав
-            new LayerPair(32, 48, 16, 16, 48, 48),  // левая рука -> левый рукав
-            new LayerPair(0, 16, 16, 16, 0, 32),    // правая нога -> правая штанина
-            new LayerPair(16, 48, 16, 16, 0, 48)    // левая нога -> левая штанина
-    );
+            // Head -> hat
+            new LayerPair(8, 0, 8, 4, 40, 0),
+            new LayerPair(16, 0, 8, 4, 48, 0),
+            new LayerPair(0, 4, 4, 8, 32, 4),
+            new LayerPair(4, 4, 8, 8, 36, 4),
+            new LayerPair(12, 4, 4, 8, 44, 4),
+            new LayerPair(16, 4, 8, 8, 48, 4),
 
+            // Torso -> jacket
+            new LayerPair(20, 16, 8, 4, 20, 32),
+            new LayerPair(28, 16, 8, 4, 28, 32),
+            new LayerPair(16, 20, 4, 12, 16, 36),
+            new LayerPair(20, 20, 8, 12, 20, 36),
+            new LayerPair(28, 20, 4, 12, 28, 36),
+            new LayerPair(32, 20, 8, 12, 32, 36),
+
+            // Right arm -> right sleeve
+            new LayerPair(44, 16, 4, 4, 44, 32),
+            new LayerPair(48, 16, 4, 4, 48, 32),
+            new LayerPair(40, 20, 4, 12, 40, 36),
+            new LayerPair(44, 20, 4, 12, 44, 36),
+            new LayerPair(48, 20, 4, 12, 48, 36),
+            new LayerPair(52, 20, 4, 12, 52, 36),
+
+            // Left arm -> left sleeve
+            new LayerPair(36, 48, 4, 4, 52, 48),
+            new LayerPair(40, 48, 4, 4, 56, 48),
+            new LayerPair(32, 52, 4, 12, 48, 52),
+            new LayerPair(36, 52, 4, 12, 52, 52),
+            new LayerPair(40, 52, 4, 12, 56, 52),
+            new LayerPair(44, 52, 4, 12, 60, 52),
+
+            // Right leg -> right pants
+            new LayerPair(4, 16, 4, 4, 4, 48),
+            new LayerPair(8, 16, 4, 4, 8, 48),
+            new LayerPair(0, 20, 4, 12, 0, 52),
+            new LayerPair(4, 20, 4, 12, 4, 52),
+            new LayerPair(8, 20, 4, 12, 8, 52),
+            new LayerPair(12, 20, 4, 12, 12, 52),
+
+            // Left leg -> left pants
+            new LayerPair(20, 48, 4, 4, 4, 48),
+            new LayerPair(24, 48, 4, 4, 8, 48),
+            new LayerPair(16, 52, 4, 12, 0, 52),
+            new LayerPair(20, 52, 4, 12, 4, 52),
+            new LayerPair(24, 52, 4, 12, 8, 52),
+            new LayerPair(28, 52, 4, 12, 12, 52)
+    );
     private ClothingTextureComposer() {
     }
 
@@ -80,6 +138,16 @@ public final class ClothingTextureComposer {
         }
 
         try {
+            /*
+             * Сначала убираем overlay предыдущего содержимого там, где текущая одежда
+             * реально рисует base-фасад. Делать это нужно ДО копирования самой одежды.
+             *
+             * Раньше очистка шла сразу после setPixelRGBA(). При таком порядке пиксели
+             * overlay самой же одежды успевали записаться раньше соответствующего base-пикселя
+             * и затем стирались. На левой штанине это проявлялось особенно заметно.
+             */
+            clearMappedOverlaysForLayer(result, clothing);
+
             int w = Math.min(clothing.getWidth(), SKIN_SIZE);
             int h = Math.min(clothing.getHeight(), SKIN_SIZE);
             for (int y = 0; y < h; y++) {
@@ -90,7 +158,6 @@ public final class ClothingTextureComposer {
                         continue;
                     }
                     result.setPixelRGBA(x, y, pixel);
-                    clearMappedOverlayPixel(result, x, y);
                 }
             }
         } finally {
@@ -98,23 +165,31 @@ public final class ClothingTextureComposer {
         }
     }
 
-    /**
-     * Если (x, y) попадает в прямоугольник первого слоя одной из частей тела - обнуляет alpha
-     * соответствующего пикселя во втором (overlay) слое той же части тела, чтобы он не
-     * просвечивал поверх только что наложенной одежды. Точка вне известных прямоугольников
-     * (например уже сам overlay-регион) не трогается - см. класс-описание.
-     */
-    private static void clearMappedOverlayPixel(NativeImage image, int x, int y) {
+    private static void clearMappedOverlaysForLayer(NativeImage result, NativeImage clothing) {
+        int w = Math.min(clothing.getWidth(), SKIN_SIZE);
+        int h = Math.min(clothing.getHeight(), SKIN_SIZE);
+
         for (LayerPair pair : LAYER_PAIRS) {
-            if (x >= pair.baseX() && x < pair.baseX() + pair.w()
-                    && y >= pair.baseY() && y < pair.baseY() + pair.h()) {
-                int ox = pair.overlayX() + (x - pair.baseX());
-                int oy = pair.overlayY() + (y - pair.baseY());
-                int existing = image.getPixelRGBA(ox, oy);
-                int cleared = existing & 0x00FFFFFF; // alpha = 0, остальные каналы не важны
-                image.setPixelRGBA(ox, oy, cleared);
-                return;
+            int maxX = Math.min(pair.baseX() + pair.w(), w);
+            int maxY = Math.min(pair.baseY() + pair.h(), h);
+            if (pair.baseX() >= maxX || pair.baseY() >= maxY) {
+                continue;
+            }
+
+            for (int y = pair.baseY(); y < maxY; y++) {
+                for (int x = pair.baseX(); x < maxX; x++) {
+                    int pixel = clothing.getPixelRGBA(x, y);
+                    if (((pixel >>> 24) & 0xFF) <= 0) {
+                        continue;
+                    }
+
+                    int ox = pair.overlayX() + (x - pair.baseX());
+                    int oy = pair.overlayY() + (y - pair.baseY());
+                    int existing = result.getPixelRGBA(ox, oy);
+                    result.setPixelRGBA(ox, oy, existing & 0x00FFFFFF);
+                }
             }
         }
     }
+
 }

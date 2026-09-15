@@ -1,4 +1,6 @@
 {
-  "size": 1,
-  "validators": ["dynamic_clothing_system:clothing_slot_match"]
+  "replace": false,
+  "validators": [
+    "dynamic_clothing_system:clothing_slot_match"
+  ]
 }

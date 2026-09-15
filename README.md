@@ -47,7 +47,7 @@ sandy_frak.zip
   "description": [
     "A stylish test coat"
   ],
-  "slot": "torso",
+  "slot": "body",
   "armor": 2,
   "toughness": 0,
   "layer": "outer",
@@ -83,7 +83,7 @@ The default clothing slots are:
 head
 face
 neck
-torso
+body
 jacket
 legs
 feet
