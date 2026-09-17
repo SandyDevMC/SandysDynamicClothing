@@ -39,21 +39,21 @@ public final class ClothingTextureComposer {
      * Точные соответствия base -> overlay для всех шести граней каждой части тела.
      *
      * Формат 64x64:
-     * - head:       base  (0..23, 0..11)   -> hat    (32..55, 0..11)
+     * - head:       base  (0..31, 0..15)   -> hat    (32..63, 0..15)
      * - torso:      base (16..39,16..31)   -> jacket (16..39,32..47)
      * - right arm:  base (40..55,16..31)   -> sleeve (40..55,32..47)
      * - left arm:   base (32..47,48..63)   -> sleeve (48..63,48..63)
-     * - right leg:  base  (0..15,16..31)   -> pants  (0..15,48..63)
+     * - right leg:  base  (0..15,16..31)   -> pants  (0..15,32..47)
      * - left leg:   base (16..31,48..63)   -> pants   (0..15,48..63)
      */
     private static final List<LayerPair> LAYER_PAIRS = List.of(
             // Head -> hat
-            new LayerPair(8, 0, 8, 4, 40, 0),
-            new LayerPair(16, 0, 8, 4, 48, 0),
-            new LayerPair(0, 4, 4, 8, 32, 4),
-            new LayerPair(4, 4, 8, 8, 36, 4),
-            new LayerPair(12, 4, 4, 8, 44, 4),
-            new LayerPair(16, 4, 8, 8, 48, 4),
+            new LayerPair(8, 0, 8, 8, 40, 0),
+            new LayerPair(16, 0, 8, 8, 48, 0),
+            new LayerPair(0, 8, 8, 8, 32, 8),
+            new LayerPair(8, 8, 8, 8, 40, 8),
+            new LayerPair(16, 8, 8, 8, 48, 8),
+            new LayerPair(24, 8, 8, 8, 56, 8),
 
             // Torso -> jacket
             new LayerPair(20, 16, 8, 4, 20, 32),
@@ -80,12 +80,12 @@ public final class ClothingTextureComposer {
             new LayerPair(44, 52, 4, 12, 60, 52),
 
             // Right leg -> right pants
-            new LayerPair(4, 16, 4, 4, 4, 48),
-            new LayerPair(8, 16, 4, 4, 8, 48),
-            new LayerPair(0, 20, 4, 12, 0, 52),
-            new LayerPair(4, 20, 4, 12, 4, 52),
-            new LayerPair(8, 20, 4, 12, 8, 52),
-            new LayerPair(12, 20, 4, 12, 12, 52),
+            new LayerPair(4, 16, 4, 4, 4, 32),
+            new LayerPair(8, 16, 4, 4, 8, 32),
+            new LayerPair(0, 20, 4, 12, 0, 36),
+            new LayerPair(4, 20, 4, 12, 4, 36),
+            new LayerPair(8, 20, 4, 12, 8, 36),
+            new LayerPair(12, 20, 4, 12, 12, 36),
 
             // Left leg -> left pants
             new LayerPair(20, 48, 4, 4, 4, 48),
