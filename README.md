@@ -57,6 +57,17 @@ sandy_frak.zip
 }
 ```
 
+## Multiplayer
+
+Clothing content is **not synced over the network**. The server and every connected client each read their own local `.minecraft/clothes/` folder independently, and the `id` in `item.json` becomes the item's actual registry name (`dynamic_clothing_system:<id>`).
+
+Because of this, the server and **every** client must run the exact same set of pack ZIPs, unmodified:
+
+- A client missing a pack the server has (or vice versa) will typically fail to connect, with NeoForge reporting missing registry entries.
+- If two different packs happen to share the same `id` but have different content (texture, armor, etc.), nothing crashes - each installation just registers its own version under that id. Since clothing textures are composited entirely client-side, this means **the same equipped item can render differently for different players**, even though the server treats it as a single consistent item.
+
+Treat `clothes/` like a required resource pack: distribute identical archives to the server and to every player (e.g. bundle them in your modpack), and avoid letting players add, remove, or swap clothing packs independently on a server they share.
+
 ## Clothing layers
 
 The layer is **global**: it describes visual order, not the body part. Pants can use `base`, boots can use `outer`, and so on.
