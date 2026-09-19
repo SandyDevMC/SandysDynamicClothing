@@ -1,0 +1,6 @@
+{
+  "replace": false,
+  "validators": [
+    "dynamic_clothing_system:clothing_slot_match"
+  ]
+}

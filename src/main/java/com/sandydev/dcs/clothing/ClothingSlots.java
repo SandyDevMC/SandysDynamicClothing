@@ -23,10 +23,12 @@ public final class ClothingSlots {
     public static final String FEET = "feet";
     public static final String HANDS = "hands";
     public static final String ACCESSORY = "accessory";
+    /** Стандартный "back"-слот Curios - сюда обычно надевается плащ ({@link ClothingKind#CAPE}). */
+    public static final String BACK = "back";
 
     /** Слоты, добавляемые данным модом по умолчанию, в порядке отображения в GUI Curios.
      *
-     * head, feet и hands здесь не перечислены как собственные регистрации:
+     * head, hands и back здесь не перечислены как собственные регистрации:
      * это базовые типы Curios, которые используются модом напрямую.
      */
     public static final List<String> DEFAULT_SLOTS = List.of(

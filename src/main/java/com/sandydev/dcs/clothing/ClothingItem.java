@@ -1,6 +1,7 @@
 package com.sandydev.dcs.clothing;
 
 import net.minecraft.ChatFormatting;
+import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.item.Item;
@@ -44,7 +45,24 @@ public class ClothingItem extends Item implements ICurioItem {
 
     @Override
     public Component getName(ItemStack stack) {
-        return Component.translatable("item." + SandysDynamicClothing.MODID + "." + definition.id(), definition.name());
+        // Имя берётся из сгенерированного lang-файла (базовое - в en_us, переводы - в своих локалях).
+        // Fallback на базовое имя из item.json нужен на случай, если ресурспак с языками не подключился.
+        return Component.translatableWithFallback(
+                ClothingLang.nameKey(SandysDynamicClothing.MODID, definition.id()), definition.name());
+    }
+
+    /**
+     * Строки описания для текущего языка клиента. Если для языка (или хотя бы для en_us) нет
+     * сгенерированной записи - например, на сервере, где клиентский ресурспак не загружен, -
+     * возвращается базовое описание из item.json.
+     */
+    private List<String> localizedDescription() {
+        Language language = Language.getInstance();
+        String key = ClothingLang.descriptionKey(SandysDynamicClothing.MODID, definition.id());
+        if (language.has(key)) {
+            return ClothingLang.splitDescription(language.getOrDefault(key));
+        }
+        return definition.description();
     }
 
     /**
@@ -85,7 +103,7 @@ public class ClothingItem extends Item implements ICurioItem {
     public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltip,
                                  TooltipFlag flag) {
         super.appendHoverText(stack, context, tooltip, flag);
-        for (String line : definition.description()) {
+        for (String line : localizedDescription()) {
             tooltip.add(Component.literal(line).withStyle(ChatFormatting.GRAY));
         }
         MutableComponent slotLine = Component.translatable("tooltip.dynamic_clothing_system.slot",

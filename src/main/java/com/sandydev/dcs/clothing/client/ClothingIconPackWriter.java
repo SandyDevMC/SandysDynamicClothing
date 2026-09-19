@@ -2,6 +2,7 @@ package com.sandydev.dcs.clothing.client;
 
 import com.sandydev.dcs.SandysDynamicClothing;
 import com.sandydev.dcs.clothing.ClothingDefinition;
+import com.sandydev.dcs.clothing.ClothingLang;
 import com.sandydev.dcs.clothing.ClothingRegistry;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.packs.PackLocationInfo;
@@ -59,19 +60,17 @@ public final class ClothingIconPackWriter {
             deleteGeneratedFiles(langDir, ".json");
 
             int written = 0;
-            java.util.Map<String, java.util.Map<String, String>> generatedNames = new java.util.LinkedHashMap<>();
             for (ClothingDefinition definition : ClothingRegistry.get().getAllDefinitions()) {
                 Files.write(texturesDir.resolve(definition.id() + ".png"), definition.iconBytes());
                 Files.writeString(modelsDir.resolve(definition.id() + ".json"), itemModelJson(definition.id()),
                         StandardCharsets.UTF_8);
-                String key = "item." + SandysDynamicClothing.MODID + "." + definition.id();
-                generatedNames.computeIfAbsent("en_us", locale -> new java.util.LinkedHashMap<>()).put(key, definition.name());
-                generatedNames.computeIfAbsent("ru_ru", locale -> new java.util.LinkedHashMap<>()).put(key, definition.name());
-                definition.translations().forEach((locale, text) ->
-                        generatedNames.computeIfAbsent(locale, ignored -> new java.util.LinkedHashMap<>()).put(key, text));
                 written++;
             }
-            generatedNames.forEach((locale, entries) -> {
+            // Имена и описания: базовый текст из item.json уходит в en_us (запасной слой для всех
+            // языков), переводы из lang/<locale>.json - в файлы своих локалей. Подробности - в ClothingLang.
+            java.util.Map<String, java.util.Map<String, String>> generatedLang = ClothingLang.buildEntries(
+                    SandysDynamicClothing.MODID, ClothingRegistry.get().getAllDefinitions());
+            generatedLang.forEach((locale, entries) -> {
                 try {
                     writeLangFile(langDir.resolve(locale + ".json"), entries);
                 } catch (IOException e) {

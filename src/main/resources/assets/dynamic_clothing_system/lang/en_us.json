@@ -10,6 +10,7 @@
   "curios.slot.feet": "Feet",
   "curios.slot.hands": "Hands",
   "curios.slot.accessory": "Accessory",
+  "curios.slot.back": "Back",
   "dynamic_clothing_system.configuration.title": "Sandy's Dynamic Clothing Configs",
   "dynamic_clothing_system.configuration.section.dynamic_clothing_system.common.toml": "Sandy's Dynamic Clothing Configs",
   "dynamic_clothing_system.configuration.section.dynamic_clothing_system.common.toml.title": "Sandy's Dynamic Clothing Configs",
@@ -22,6 +23,7 @@
   "curios.identifier.feet": "Feet",
   "curios.identifier.hands": "Hands",
   "curios.identifier.accessory": "Accessory",
+  "curios.identifier.back": "Back",
   "tooltip.dynamic_clothing_system.armor": "Armor: %s",
   "tooltip.dynamic_clothing_system.armor_toughness": "Armor Toughness: %s"
 }

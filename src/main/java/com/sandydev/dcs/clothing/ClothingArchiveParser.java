@@ -15,8 +15,10 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -33,6 +35,12 @@ import java.util.zip.ZipFile;
  * объект не переопределяет имя файла полями {@code texture}/{@code icon} - это удобно,
  * когда в одном архиве лежит несколько предметов с разными текстурами.
  * <p>
+ * Необязательные переводы лежат в подпапке {@code lang/} рядом с {@code item.json}
+ * ({@code lang/en_us.json}, {@code lang/ru_ru.json}, ...) - см. {@link #readLangFiles}.
+ * Проблема в файле перевода никогда не отменяет загрузку предмета: он просто остаётся на
+ * базовых {@code name}/{@code description} из {@code item.json}, а причина попадает в
+ * {@link ParsedEntry#warnings()}.
+ * <p>
  * Ошибка в одном предмете ({@link ClothingLoadException}) не мешает разобрать остальные
  * предметы того же архива - она просто логируется на уровне {@link ClothingLoader}.
  */
@@ -43,21 +51,38 @@ public final class ClothingArchiveParser {
 
     private static final int REQUIRED_TEXTURE_SIZE = 64;
 
+    /** Подпапка с необязательными переводами рядом с item.json. */
+    private static final String LANG_FOLDER = "lang";
+
+    /** Имя файла локали - как в ресурспаках Minecraft: строчные латинские буквы, цифры и '_'. */
+    private static final Pattern LOCALE_PATTERN = Pattern.compile("^[a-z0-9_]+$");
+
+    /** Ванильный размер cape/elytra-полотна - см. {@link ClothingKind#CAPE}. */
+    private static final int REQUIRED_CAPE_WIDTH = 64;
+    private static final int REQUIRED_CAPE_HEIGHT = 32;
+
     private ClothingArchiveParser() {
     }
 
     /**
      * Результат разбора одного {@code item.json} - либо готовое определение, либо ошибка.
      * Список содержит один элемент на каждый обнаруженный в JSON объект предмета.
+     *
+     * @param warnings некритичные замечания (например, битый файл {@code lang/ru_ru.json}).
+     *                 Предмет при этом загружен, просто без соответствующего перевода.
      */
-    public record ParsedEntry(ClothingDefinition definition, ClothingLoadException error) {
+    public record ParsedEntry(ClothingDefinition definition, ClothingLoadException error, List<String> warnings) {
 
-        static ParsedEntry ok(ClothingDefinition definition) {
-            return new ParsedEntry(definition, null);
+        public ParsedEntry {
+            warnings = warnings == null ? List.of() : List.copyOf(warnings);
+        }
+
+        static ParsedEntry ok(ClothingDefinition definition, List<String> warnings) {
+            return new ParsedEntry(definition, null, warnings);
         }
 
         static ParsedEntry failed(ClothingLoadException error) {
-            return new ParsedEntry(null, error);
+            return new ParsedEntry(null, error, List.of());
         }
 
         public boolean isOk() {
@@ -139,13 +164,16 @@ public final class ClothingArchiveParser {
             return out;
         }
 
+        LangFiles langFiles = objects.isEmpty() ? LangFiles.EMPTY : readLangFiles(zip, folder, objects.size());
+        boolean singleItem = objects.size() == 1;
         for (JsonObject obj : objects) {
-            out.add(parseSingleDefinition(zip, obj, folder, archiveName));
+            out.add(parseSingleDefinition(zip, obj, folder, archiveName, langFiles, singleItem));
         }
         return out;
     }
 
-    private static ParsedEntry parseSingleDefinition(ZipFile zip, JsonObject obj, String folder, String archiveName) {
+    private static ParsedEntry parseSingleDefinition(ZipFile zip, JsonObject obj, String folder, String archiveName,
+                                                       LangFiles langFiles, boolean singleItem) {
         try {
             String id = requireString(obj, "id");
             if (!ID_PATTERN.matcher(id).matches()) {
@@ -161,6 +189,15 @@ public final class ClothingArchiveParser {
                 throw new ClothingLoadException(ClothingLoadException.Reason.UNKNOWN_SLOT_FORMAT,
                         "Пустой slot у предмета '" + id + "' в архиве '" + archiveName + "'");
             }
+
+            ClothingKind kind;
+            try {
+                kind = ClothingKind.parse(readOptionalString(obj, "type", "skin", id));
+            } catch (IllegalArgumentException e) {
+                throw new ClothingLoadException(ClothingLoadException.Reason.INVALID_JSON,
+                        "Поле 'type' у предмета '" + id + "': " + e.getMessage(), e);
+            }
+
             int armor = readInt(obj, "armor", 0);
             if (armor < 0) {
                 throw new ClothingLoadException(ClothingLoadException.Reason.INVALID_JSON,
@@ -171,8 +208,13 @@ public final class ClothingArchiveParser {
                 throw new ClothingLoadException(ClothingLoadException.Reason.INVALID_JSON,
                         "Поле 'toughness' у предмета '" + id + "' не может быть отрицательным");
             }
+
             int priority;
-            if (obj.has("priority")) {
+            if (kind == ClothingKind.CAPE) {
+                // Плащ не участвует в композиции скина - порядок наложения ему не нужен,
+                // поле layer/priority у него просто игнорируется, даже если указано в item.json.
+                priority = 0;
+            } else if (obj.has("priority")) {
                 // Обратная совместимость: точное числовое значение по-прежнему можно использовать.
                 priority = readInt(obj, "priority", 20);
             } else {
@@ -185,21 +227,28 @@ public final class ClothingArchiveParser {
                 }
             }
 
-            java.util.Map<String, String> translations = readTranslations(obj, id);
+            List<String> warnings = new ArrayList<>(langFiles.warnings());
+            Map<String, ClothingTranslation> translations =
+                    buildTranslations(obj, id, langFiles, singleItem, warnings);
 
             String textureFile = readOptionalString(obj, "texture", "texture.png", id);
             String iconFile = readOptionalString(obj, "icon", "icon.png", id);
 
             byte[] textureBytes = readSibling(zip, folder, textureFile, id, archiveName,
                     ClothingLoadException.Reason.MISSING_TEXTURE);
-            validateTextureSize(textureBytes, id, archiveName);
+            if (kind == ClothingKind.CAPE) {
+                validateCapeTextureSize(textureBytes, id, archiveName);
+            } else {
+                validateTextureSize(textureBytes, id, archiveName);
+            }
 
             byte[] iconBytes = readSibling(zip, folder, iconFile, id, archiveName,
                     ClothingLoadException.Reason.MISSING_ICON);
             validateIsPng(iconBytes, id, archiveName);
 
             return ParsedEntry.ok(new ClothingDefinition(
-                    id, name, description, slot, armor, toughness, priority, textureBytes, iconBytes, archiveName, translations));
+                    id, name, description, slot, kind, armor, toughness, priority, textureBytes, iconBytes,
+                    archiveName, translations), warnings);
         } catch (ClothingLoadException e) {
             return ParsedEntry.failed(e);
         } catch (RuntimeException e) {
@@ -207,6 +256,144 @@ public final class ClothingArchiveParser {
                     ClothingLoadException.Reason.INVALID_JSON,
                     "Некорректное поле у предмета в архиве '" + archiveName + "': " + e.getMessage(), e));
         }
+    }
+
+    /**
+     * Содержимое подпапки {@code lang/} одного {@code item.json}.
+     *
+     * @param byLocale код локали (нижний регистр, без {@code .json}) -&gt; корневой JSON-объект файла
+     * @param warnings проблемы, из-за которых какой-то файл перевода пришлось пропустить
+     */
+    private record LangFiles(Map<String, JsonObject> byLocale, List<String> warnings) {
+        static final LangFiles EMPTY = new LangFiles(Map.of(), List.of());
+    }
+
+    /**
+     * Читает {@code <папка item.json>/lang/*.json}. Подпапки внутри {@code lang/} не
+     * просматриваются. Всё в этой папке необязательно: отсутствие папки - нормальный случай,
+     * а нечитаемый файл только даёт предупреждение и пропускается, но не ломает предмет.
+     */
+    private static LangFiles readLangFiles(ZipFile zip, String folder, int itemCount) {
+        String prefix = (folder.isEmpty() ? "" : folder + "/") + LANG_FOLDER + "/";
+        List<ZipEntry> candidates = zip.stream()
+                .filter(e -> !e.isDirectory())
+                .filter(e -> e.getName().length() > prefix.length()
+                        && e.getName().regionMatches(true, 0, prefix, 0, prefix.length()))
+                .filter(e -> e.getName().indexOf('/', prefix.length()) < 0)
+                .filter(e -> e.getName().toLowerCase(Locale.ROOT).endsWith(".json"))
+                .map(e -> (ZipEntry) e)
+                .sorted(java.util.Comparator.comparing(ZipEntry::getName))
+                .toList();
+        if (candidates.isEmpty()) {
+            return LangFiles.EMPTY;
+        }
+
+        Map<String, JsonObject> byLocale = new LinkedHashMap<>();
+        List<String> warnings = new ArrayList<>();
+        for (ZipEntry entry : candidates) {
+            String fileName = entry.getName().substring(prefix.length());
+            String locale = fileName.substring(0, fileName.length() - ".json".length()).toLowerCase(Locale.ROOT);
+            if (!LOCALE_PATTERN.matcher(locale).matches()) {
+                warnings.add("файл перевода '" + entry.getName() + "' пропущен: имя должно быть кодом локали "
+                        + "вида en_us / ru_ru (латиница, цифры и '_')");
+                continue;
+            }
+            try {
+                JsonElement root = JsonParser.parseString(
+                        new String(readEntry(zip, entry), StandardCharsets.UTF_8));
+                if (!root.isJsonObject()) {
+                    warnings.add("файл перевода '" + entry.getName() + "' пропущен: корень должен быть объектом "
+                            + "вида {\"name\": \"...\", \"description\": [\"...\"]}");
+                    continue;
+                }
+                JsonObject object = root.getAsJsonObject();
+                if (itemCount > 1 && (object.has("name") || object.has("description"))) {
+                    warnings.add("файл перевода '" + entry.getName() + "': item.json содержит несколько предметов, "
+                            + "поэтому 'name'/'description' на верхнем уровне ни к кому не относятся - "
+                            + "используйте разделы по id: {\"<id>\": {\"name\": \"...\"}}");
+                }
+                byLocale.put(locale, object);
+            } catch (IOException | JsonParseException e) {
+                warnings.add("файл перевода '" + entry.getName() + "' пропущен: " + firstLine(e.getMessage()));
+            }
+        }
+        return new LangFiles(byLocale, warnings);
+    }
+
+    /**
+     * Собирает переводы предмета. Приоритет по полям, от низшего к высшему:
+     * базовые {@code name}/{@code description} из item.json (здесь не участвуют - они запасной
+     * вариант на стороне {@link ClothingLang}) &lt; устаревшее {@code translations} в item.json (только name)
+     * &lt; {@code lang/<locale>.json}.
+     */
+    private static Map<String, ClothingTranslation> buildTranslations(JsonObject obj, String id, LangFiles langFiles,
+                                                                       boolean singleItem, List<String> warnings)
+            throws ClothingLoadException {
+        Map<String, ClothingTranslation> result = new LinkedHashMap<>();
+
+        readTranslations(obj, id).forEach((locale, text) ->
+                result.put(locale.toLowerCase(Locale.ROOT), new ClothingTranslation(text, List.of())));
+
+        for (Map.Entry<String, JsonObject> file : langFiles.byLocale().entrySet()) {
+            String locale = file.getKey();
+            JsonObject section = pickLangSection(file.getValue(), id, singleItem);
+            if (section == null) {
+                if (singleItem && !file.getValue().entrySet().isEmpty()) {
+                    warnings.add("lang/" + locale + ".json у предмета '" + id + "' не содержит ни 'name', "
+                            + "ни 'description' - файл проигнорирован");
+                }
+                continue;
+            }
+            try {
+                ClothingTranslation fromFile = readTranslationSection(section);
+                if (fromFile.isEmpty()) {
+                    continue;
+                }
+                ClothingTranslation legacy = result.get(locale);
+                String name = fromFile.name() != null ? fromFile.name() : legacy != null ? legacy.name() : null;
+                result.put(locale, new ClothingTranslation(name, fromFile.description()));
+            } catch (ClothingLoadException e) {
+                warnings.add("lang/" + locale + ".json у предмета '" + id + "': " + e.getMessage());
+            }
+        }
+        return java.util.Collections.unmodifiableMap(result);
+    }
+
+    /**
+     * Выбирает из файла перевода раздел, относящийся к предмету. Поддерживаются две формы:
+     * <ul>
+     *   <li>плоская {@code {"name": ..., "description": ...}} - когда {@code item.json} описывает
+     *       ровно один предмет (обычный случай "одна папка - один предмет");</li>
+     *   <li>по id {@code {"<id>": {"name": ..., ...}}} - нужна, если один {@code item.json}
+     *       содержит массив из нескольких предметов и файл перевода у них общий.</li>
+     * </ul>
+     */
+    private static JsonObject pickLangSection(JsonObject root, String id, boolean singleItem) {
+        JsonElement byId = root.get(id);
+        if (byId != null && byId.isJsonObject()) {
+            return byId.getAsJsonObject();
+        }
+        if (singleItem && (root.has("name") || root.has("description"))) {
+            return root;
+        }
+        return null;
+    }
+
+    /** Читает {@code name}/{@code description} из раздела файла перевода; оба поля необязательны. */
+    private static ClothingTranslation readTranslationSection(JsonObject section) throws ClothingLoadException {
+        String name = null;
+        if (section.has("name") && !section.get("name").isJsonNull()) {
+            JsonElement el = section.get("name");
+            if (!el.isJsonPrimitive() || !el.getAsJsonPrimitive().isString()) {
+                throw new ClothingLoadException(ClothingLoadException.Reason.INVALID_JSON,
+                        "поле 'name' должно быть строкой");
+            }
+            String trimmed = el.getAsString().trim();
+            if (!trimmed.isEmpty()) {
+                name = trimmed;
+            }
+        }
+        return new ClothingTranslation(name, readDescription(section));
     }
 
     private static java.util.Map<String, String> readTranslations(JsonObject obj, String id) throws ClothingLoadException {
@@ -374,6 +561,23 @@ public final class ClothingArchiveParser {
         }
     }
 
+    /** Как {@link #validateTextureSize}, но для плаща - требует ванильную раскладку cape/elytra 64x32. */
+    private static void validateCapeTextureSize(byte[] pngBytes, String id, String archiveName)
+            throws ClothingLoadException {
+        BufferedImage image = readPng(pngBytes, id, archiveName, ClothingLoadException.Reason.INVALID_TEXTURE_SIZE);
+        try {
+            if (image.getWidth() != REQUIRED_CAPE_WIDTH || image.getHeight() != REQUIRED_CAPE_HEIGHT) {
+                throw new ClothingLoadException(ClothingLoadException.Reason.INVALID_TEXTURE_SIZE,
+                        "texture.png плаща '" + id + "' в архиве '" + archiveName + "' имеет размер "
+                                + image.getWidth() + "x" + image.getHeight() + ", а должен быть "
+                                + REQUIRED_CAPE_WIDTH + "x" + REQUIRED_CAPE_HEIGHT
+                                + " (ванильная раскладка cape/elytra)");
+            }
+        } finally {
+            image.flush();
+        }
+    }
+
     private static void validateIsPng(byte[] pngBytes, String id, String archiveName) throws ClothingLoadException {
         readPng(pngBytes, id, archiveName, ClothingLoadException.Reason.MISSING_ICON);
     }
@@ -398,6 +602,15 @@ public final class ClothingArchiveParser {
             in.transferTo(buffer);
             return buffer.toByteArray();
         }
+    }
+
+    /** Первая строка сообщения исключения - у Gson в конец дописана ссылка на Troubleshooting. */
+    private static String firstLine(String message) {
+        if (message == null) {
+            return "неизвестная ошибка";
+        }
+        int idx = message.indexOf('\n');
+        return idx < 0 ? message : message.substring(0, idx);
     }
 
     private static String baseName(String zipEntryName) {

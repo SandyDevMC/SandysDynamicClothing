@@ -10,6 +10,7 @@
   "curios.slot.feet": "Ступни",
   "curios.slot.hands": "Руки",
   "curios.slot.accessory": "Аксессуар",
+  "curios.slot.back": "Спина",
   "dynamic_clothing_system.configuration.title": "Настройки Sandy's Dynamic Clothing",
   "dynamic_clothing_system.configuration.section.dynamic_clothing_system.common.toml": "Настройки Sandy's Dynamic Clothing",
   "dynamic_clothing_system.configuration.section.dynamic_clothing_system.common.toml.title": "Настройки Sandy's Dynamic Clothing",
@@ -22,6 +23,7 @@
   "curios.identifier.feet": "Ступни",
   "curios.identifier.hands": "Руки",
   "curios.identifier.accessory": "Аксессуар",
+  "curios.identifier.back": "Спина",
   "tooltip.dynamic_clothing_system.armor": "Броня: %s",
   "tooltip.dynamic_clothing_system.armor_toughness": "Твёрдость брони: %s"
 }

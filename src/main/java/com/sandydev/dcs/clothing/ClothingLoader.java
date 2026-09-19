@@ -39,6 +39,8 @@ public final class ClothingLoader {
 
         for (Path archive : archives) {
             List<ClothingArchiveParser.ParsedEntry> entries = ClothingArchiveParser.parse(archive);
+            // Одно замечание про файл перевода может прийти с несколькими предметами - логируем один раз.
+            java.util.Set<String> warnedInArchive = new java.util.HashSet<>();
             for (ClothingArchiveParser.ParsedEntry entry : entries) {
                 if (!entry.isOk()) {
                     failed++;
@@ -48,6 +50,12 @@ public final class ClothingLoader {
                 }
 
                 ClothingDefinition definition = entry.definition();
+                for (String warning : entry.warnings()) {
+                    if (warnedInArchive.add(warning)) {
+                        logger.warn("[DynamicClothingSystem] Локализация в архиве '{}': {}",
+                                archive.getFileName(), warning);
+                    }
+                }
                 if (ClothingRegistry.get().getDefinition(definition.id()).isPresent()) {
                     failed++;
                     logger.warn("[DynamicClothingSystem] Пропущен предмет с дублирующимся id '{}' из архива '{}' "
@@ -58,9 +66,10 @@ public final class ClothingLoader {
 
                 ClothingRegistry.get().register(definition);
                 loaded++;
-                logger.info("[DynamicClothingSystem] Загружена одежда '{}' (слот={}, броня={}, твёрдость={}, priority={}) из '{}'",
-                        definition.id(), definition.slot(), definition.armor(), definition.toughness(), definition.priority(),
-                        definition.sourceArchive());
+                logger.info("[DynamicClothingSystem] Загружена одежда '{}' (тип={}, слот={}, броня={}, твёрдость={}, "
+                                + "priority={}, переводы={}) из '{}'",
+                        definition.id(), definition.kind(), definition.slot(), definition.armor(), definition.toughness(),
+                        definition.priority(), definition.translations().keySet(), definition.sourceArchive());
             }
         }
 

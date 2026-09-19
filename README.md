@@ -7,10 +7,12 @@ Clothing is loaded from simple ZIP archives, equipped through Curios, and compos
 ## Features
 
 - Dynamic clothing textures composited onto the player's current skin.
+- Capes (`type: "cape"`) rendered as a plain cape-texture swap - no skin compositing involved.
 - Curios slots for clothing.
 - Seven simple visual layers: `under`, `shirt`, `base`, `vest`, `jacket`, `coat`, `outer`.
 - Optional legacy numeric `priority` for precise ordering.
 - Multiple clothing items can be supplied by a single ZIP archive
+- Optional per-item translations: a `lang/` folder (`en_us.json`, `ru_ru.json`, ...) next to each `item.json`; the base `name`/`description` alone is enough for an item to work
 
 ## Requirements
 
@@ -36,7 +38,7 @@ sandy_frak.zip
 └── icon.png
 ```
 
-`texture.png` must be a **64×64 PNG** matching the normal Minecraft player skin layout.
+`texture.png` must be a **64×64 PNG** matching the normal Minecraft player skin layout - unless the item is a cape (`type: "cape"`), which uses a **64×32** vanilla cape/elytra texture instead. See [CLOTHING_PACK_FORMAT.md](CLOTHING_PACK_FORMAT.md) for the full breakdown.
 
 ### `item.json`
 
@@ -50,23 +52,13 @@ sandy_frak.zip
   "slot": "body",
   "armor": 2,
   "toughness": 0,
-  "layer": "outer",
-  "translations": {
-    "ru_ru": "Фрак Санди"
-  }
+  "layer": "outer"
 }
 ```
 
-## Multiplayer
-
-Clothing content is **not synced over the network**. The server and every connected client each read their own local `.minecraft/clothes/` folder independently, and the `id` in `item.json` becomes the item's actual registry name (`dynamic_clothing_system:<id>`).
-
-Because of this, the server and **every** client must run the exact same set of pack ZIPs, unmodified:
-
-- A client missing a pack the server has (or vice versa) will typically fail to connect, with NeoForge reporting missing registry entries.
-- If two different packs happen to share the same `id` but have different content (texture, armor, etc.), nothing crashes - each installation just registers its own version under that id. Since clothing textures are composited entirely client-side, this means **the same equipped item can render differently for different players**, even though the server treats it as a single consistent item.
-
-Treat `clothes/` like a required resource pack: distribute identical archives to the server and to every player (e.g. bundle them in your modpack), and avoid letting players add, remove, or swap clothing packs independently on a server they share.
+Translations are optional and go into a `lang/` folder next to the `item.json`
+(`lang/en_us.json`, `lang/ru_ru.json`, ...) - see [Localization](CLOTHING_PACK_FORMAT.md#localization).
+Without one, every player sees the `name`/`description` above.
 
 ## Clothing layers
 
@@ -86,6 +78,30 @@ Higher priority is composited later and therefore appears above lower layers.
 
 For most clothing creators, **never use `priority`**. Just choose the appropriate `layer`.
 
+`layer`/`priority` only apply to `type: "skin"` items (the default). Capes
+(`type: "cape"`) aren't composited onto the skin at all, so this field is
+ignored for them - see the next section.
+
+## Capes
+
+A cape is a different item **format**, not just another slot:
+
+```json
+{
+  "id": "travellers_cape",
+  "name": "Traveller's Cape",
+  "slot": "back",
+  "type": "cape"
+}
+```
+
+Instead of the usual 64×64 skin-layout texture, a cape's `texture.png` is a
+**64×32 PNG in the vanilla cape/elytra layout**. There's no per-pixel
+compositing step - the whole texture simply replaces the player's cape
+texture, and vanilla's own cape rendering draws it. That also means a cape
+doesn't participate in skin layering at all: `layer`/`priority` don't apply
+to it.
+
 ## Curios slots
 
 The default clothing slots are:
@@ -100,7 +116,12 @@ legs
 feet
 hands
 accessory
+back
 ```
 
-`slot` controls **where** the item is equipped. `layer` controls **how it is composited**. They are independent.
+`back` is the standard Curios slot, normally used for capes (`type: "cape"`,
+see above) - but as with any slot, that's just convention, not an enforced
+rule.
+
+`slot` controls **where** the item is equipped. `layer` controls **how it is composited** (for `type: "skin"` items only). They are independent.
 
