@@ -11,7 +11,7 @@ Clothing is loaded from simple ZIP archives, equipped through Curios, and compos
 - Curios slots for clothing.
 - Seven simple visual layers: `under`, `shirt`, `base`, `vest`, `jacket`, `coat`, `outer`.
 - Optional legacy numeric `priority` for precise ordering.
-- Multiple clothing items can be supplied by a single ZIP archive
+- Multiple clothing items can be supplied by a single CLOTH archive
 - Optional per-item translations: a `lang/` folder (`en_us.json`, `ru_ru.json`, ...) next to each `item.json`; the base `name`/`description` alone is enough for an item to work
 - Pack manifest (`manifest.json`, optional) declares a pack format version, defaulting to the latest if omitted
 - Archive size/entry limits and safe path handling - see [CLOTHING_PACK_FORMAT.md#archive-limits](CLOTHING_PACK_FORMAT.md#archive-limits)
