@@ -16,6 +16,7 @@ import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
+import net.neoforged.fml.event.lifecycle.FMLConstructModEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -24,8 +25,16 @@ import org.slf4j.Logger;
 /**
  * Точка входа мода.
  * <p>
- * Порядок вызовов в конструкторе важен - одежда должна быть найдена и поставлена
- * в очередь регистрации до того, как модовая шина доставит {@code RegisterEvent}.
+ * Сканирование {@code clothes/} и постановка предметов в очередь DeferredRegister происходит не
+ * прямо в конструкторе, а в обработчике {@link #onConstructMod}, подписанном на {@code
+ * FMLConstructModEvent} - это единственный момент, который одновременно (а) наступает уже
+ * после того, как отработали конструкторы ВСЕХ модов, и (б) наступает раньше, чем шина
+ * доставит {@code RegisterEvent}. Первое важно для хуков аддонов (см. {@code
+ * com.sandydev.dcs.api.event} и ADDON_API.md) - если сканировать и слать события прямо из
+ * своего конструктора, при некоторых порядках загрузки модов слушатель аддона просто не успел
+ * бы подписаться на {@code NeoForge.EVENT_BUS}. Второе - потому что {@link ClothingItems}
+ * читает {@link ClothingRegistry} для постановки предметов в очередь регистрации, а это должно
+ * произойти строго до RegisterEvent.
  */
 @Mod(SandysDynamicClothing.MODID)
 public class SandysDynamicClothing {
@@ -48,13 +57,9 @@ public class SandysDynamicClothing {
                     .build());
 
     public SandysDynamicClothing(IEventBus modEventBus, ModContainer modContainer) {
-        // Сканируем .minecraft/clothes/*.zip и заполняем ClothingRegistry определениями одежды.
-        // Это должно случиться раньше, чем ClothingItems поставит предметы в очередь регистрации.
-        ClothingLoader.loadAll(LOGGER);
-
-        // По одному DeferredItem на каждое найденное определение. Сама регистрация в реестр
-        // игры произойдёт позже - в момент, когда шина доставит RegisterEvent.
-        ClothingItems.registerAll(LOGGER);
+        // По одному DeferredItem на каждое найденное определение (само наполнение реестра
+        // произойдёт позже, в onConstructMod) - сама подписка DeferredRegister на шину не
+        // зависит от того, есть ли уже в нём записи, поэтому её можно сделать прямо сейчас.
         ClothingItems.ITEMS.register(modEventBus);
         CREATIVE_MODE_TABS.register(modEventBus);
 
@@ -63,12 +68,21 @@ public class SandysDynamicClothing {
         // раньше, чем предикат вообще появится.
         ClothingSlotValidator.register();
 
-
+        modEventBus.addListener(this::onConstructMod);
         modEventBus.addListener(this::commonSetup);
 
         NeoForge.EVENT_BUS.addListener(com.sandydev.dcs.clothing.ClothingInteractionHandler::onRightClickItem);
 
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
+    }
+
+    private void onConstructMod(FMLConstructModEvent event) {
+        // Сканируем .minecraft/clothes/ (*.cloth, *.zip) и заполняем ClothingRegistry
+        // определениями одежды - см. класс-javadoc про то, почему именно здесь, а не в
+        // конструкторе. Это должно случиться раньше, чем ClothingItems поставит предметы
+        // в очередь регистрации.
+        ClothingLoader.loadAll(LOGGER);
+        ClothingItems.registerAll(LOGGER);
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {

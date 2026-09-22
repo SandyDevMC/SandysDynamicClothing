@@ -1,6 +1,7 @@
 package com.sandydev.dcs.mixin;
 
-import com.sandydev.dcs.clothing.ClothingManager;
+import com.sandydev.dcs.clothing.client.ClothingCapeResolver;
+import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.player.PlayerModelPart;
 import org.spongepowered.asm.mixin.Mixin;
@@ -15,11 +16,16 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * <p>
  * Без этой подмены штатный {@code CapeLayer} молча ничего не рисует для тех игроков, кто когда-то
  * отключил себе показ капюшона в настройках - даже если cape-текстура была успешно подменена в
- * {@link AbstractClientPlayerMixin}.
+ * {@link AbstractClientPlayerMixin}. Использует тот же {@link ClothingCapeResolver}, что и он -
+ * иначе плащ, подставленный аддоном через событие (а не через Curios), мог бы оказаться
+ * невидимым: этот mixin просто не знал бы, что его вообще нужно показывать.
  * <p>
  * {@code Player} - общий для клиента и сервера класс, но сам этот mixin применяется только на
- * клиенте (объявлен в секции "client" {@code dynamic_clothing_system.mixins.json}) - серверную
- * логику эта настройка не затрагивает.
+ * клиенте (объявлен в секции "client" {@code dynamic_clothing_system.mixins.json}). Класс
+ * {@code Player.class} при этом всё равно один на JVM-процесс, а в одиночной игре в том же
+ * процессе живёт и встроенный сервер - поэтому {@code self} может оказаться настоящим
+ * {@code ServerPlayer}, а не {@link AbstractClientPlayer}; у такого игрока нет понятия
+ * "разрешённая клиентом cape-текстура", и мы его не трогаем.
  */
 @Mixin(Player.class)
 public abstract class PlayerModelPartMixin {
@@ -29,8 +35,10 @@ public abstract class PlayerModelPartMixin {
         if (part != PlayerModelPart.CAPE || cir.getReturnValue()) {
             return;
         }
-        Player self = (Player) (Object) this;
-        if (ClothingManager.getEquippedCape(self).isPresent()) {
+        if (!((Object) this instanceof AbstractClientPlayer self)) {
+            return;
+        }
+        if (ClothingCapeResolver.resolve(self) != null) {
             cir.setReturnValue(true);
         }
     }

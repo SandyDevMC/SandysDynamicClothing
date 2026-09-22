@@ -3,7 +3,6 @@ package com.sandydev.dcs.clothing;
 import net.minecraft.ChatFormatting;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.core.Holder;
@@ -106,17 +105,8 @@ public class ClothingItem extends Item implements ICurioItem {
         for (String line : localizedDescription()) {
             tooltip.add(Component.literal(line).withStyle(ChatFormatting.GRAY));
         }
-        MutableComponent slotLine = Component.translatable("tooltip.dynamic_clothing_system.slot",
-                Component.translatable("curios.identifier." + definition.slot()))
-                .withStyle(ChatFormatting.DARK_GRAY);
-        tooltip.add(slotLine);
-        if (definition.armor() > 0) {
-            tooltip.add(Component.translatable("tooltip.dynamic_clothing_system.armor", definition.armor())
-                    .withStyle(ChatFormatting.BLUE));
-        }
-        if (definition.toughness() > 0.0) {
-            tooltip.add(Component.translatable("tooltip.dynamic_clothing_system.armor_toughness", definition.toughness())
-                    .withStyle(ChatFormatting.BLUE));
-        }
+        // Слот, броня и твёрдость брони не дублируются вручную: Curios сам добавляет
+        // стандартный блок информации для экипировки и её атрибутов. Наш предмет отвечает
+        // здесь только за собственное текстовое описание.
     }
 }

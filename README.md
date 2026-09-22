@@ -13,6 +13,9 @@ Clothing is loaded from simple ZIP archives, equipped through Curios, and compos
 - Optional legacy numeric `priority` for precise ordering.
 - Multiple clothing items can be supplied by a single ZIP archive
 - Optional per-item translations: a `lang/` folder (`en_us.json`, `ru_ru.json`, ...) next to each `item.json`; the base `name`/`description` alone is enough for an item to work
+- Pack manifest (`manifest.json`, optional) declares a pack format version, defaulting to the latest if omitted
+- Archive size/entry limits and safe path handling - see [CLOTHING_PACK_FORMAT.md#archive-limits](CLOTHING_PACK_FORMAT.md#archive-limits)
+- Addon hooks for other mods - see [ADDON_API.md](ADDON_API.md)
 
 ## Requirements
 
@@ -23,7 +26,11 @@ Clothing is loaded from simple ZIP archives, equipped through Curios, and compos
 
 ## Installing clothing packs
 
-Create a `.zip` file and put it in:
+The mod ships with a few built-in demonstration packs from `ExamplePacks`. On first launch they
+are copied into `.minecraft/clothes/` automatically, so the example items are available immediately
+without downloading anything from GitHub. Existing files with the same names are never overwritten.
+
+For additional clothing, create a `.cloth` file (the older `.zip` extension still works too) and put it in:
 
 ```text
 .minecraft/clothes/
@@ -32,7 +39,7 @@ Create a `.zip` file and put it in:
 The smallest supported pack looks like this:
 
 ```text
-sandy_frak.zip
+sandy_frak.cloth
 ├── item.json
 ├── texture.png
 └── icon.png

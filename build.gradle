@@ -18,6 +18,13 @@ sourceSets.main.resources {
     exclude("src/generated/**/.cache")
 }
 
+tasks.withType(ProcessResources).configureEach {
+    from('ExamplePacks') {
+        include('*.cloth')
+        into('example_packs')
+    }
+}
+
 repositories {
     // Official Curios API maven (see https://github.com/TheIllusiveC4/Curios)
     maven {
@@ -27,12 +34,7 @@ repositories {
 }
 
 base {
-    archivesName = "sandysdynamicclothing"
-}
-
-// Produce a stable filename for the distributable mod jar.
-tasks.withType(Jar).configureEach {
-    archiveFileName = "sandysdynamicclothing.jar"
+    archivesName = "SandysDynamicClothing"
 }
 
 java {

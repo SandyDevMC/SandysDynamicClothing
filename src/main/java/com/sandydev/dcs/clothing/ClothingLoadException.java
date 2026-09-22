@@ -18,7 +18,16 @@ public class ClothingLoadException extends Exception {
         INVALID_ID,
         UNKNOWN_SLOT_FORMAT,
         DUPLICATE_ID,
-        IO_ERROR
+        IO_ERROR,
+        /** Имя записи в архиве не прошло проверку безопасности (см. {@link ClothingArchiveSecurity}). */
+        UNSAFE_ENTRY_NAME,
+        /** Сам файл архива на диске превышает {@link ClothingArchiveSecurity#MAX_ARCHIVE_FILE_SIZE}. */
+        ARCHIVE_TOO_LARGE,
+        /** В архиве больше записей, чем {@link ClothingArchiveSecurity#MAX_ENTRY_COUNT}. */
+        TOO_MANY_ENTRIES,
+        /** Одна запись (распакованная) превышает {@link ClothingArchiveSecurity#MAX_ENTRY_SIZE},
+         *  либо весь архив суммарно превысил {@link ClothingArchiveSecurity#MAX_TOTAL_UNCOMPRESSED_SIZE}. */
+        ENTRY_TOO_LARGE
     }
 
     private final Reason reason;

@@ -33,6 +33,9 @@ import java.util.List;
  *                      cape/elytra для {@link ClothingKind#CAPE}.
  * @param iconBytes     сырые байты {@code icon.png}, используется как иконка предмета.
  * @param sourceArchive имя архива-источника (для логов и диагностики ошибок).
+ * @param packFormat    версия формата пака, объявленная в {@code manifest.json} архива-источника
+ *                      (или {@link ClothingPackFormat#LATEST}, если манифеста нет) - см.
+ *                      {@link ClothingPackManifest}.
  * @param translations  необязательные переводы name/description по локалям (ключ - код локали в
  *                      нижнем регистре, например {@code ru_ru}). Источники: файлы
  *                      {@code lang/<locale>.json} рядом с {@code item.json} и устаревшее поле
@@ -51,6 +54,7 @@ public record ClothingDefinition(
         byte[] textureBytes,
         byte[] iconBytes,
         String sourceArchive,
+        ClothingPackFormat packFormat,
         java.util.Map<String, ClothingTranslation> translations
 ) {
 }

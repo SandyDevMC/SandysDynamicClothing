@@ -9,9 +9,7 @@ import com.google.gson.JsonParser;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -24,7 +22,8 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 /**
- * Разбирает один zip-архив одежды в список {@link ClothingDefinition}.
+ * Разбирает один архив одежды ({@code .cloth}, либо устаревший {@code .zip}) в список
+ * {@link ClothingDefinition}.
  * <p>
  * Архив может хранить {@code item.json}/{@code texture.png}/{@code icon.png} как в корне,
  * так и в произвольной вложенной папке (например {@code clothes/item.json}). Внутри одного
@@ -35,6 +34,9 @@ import java.util.zip.ZipFile;
  * объект не переопределяет имя файла полями {@code texture}/{@code icon} - это удобно,
  * когда в одном архиве лежит несколько предметов с разными текстурами.
  * <p>
+ * Необязательный {@code manifest.json} в корне архива объявляет версию формата пака - см.
+ * {@link #readManifest} и {@link ClothingPackFormat}.
+ * <p>
  * Необязательные переводы лежат в подпапке {@code lang/} рядом с {@code item.json}
  * ({@code lang/en_us.json}, {@code lang/ru_ru.json}, ...) - см. {@link #readLangFiles}.
  * Проблема в файле перевода никогда не отменяет загрузку предмета: он просто остаётся на
@@ -43,6 +45,9 @@ import java.util.zip.ZipFile;
  * <p>
  * Ошибка в одном предмете ({@link ClothingLoadException}) не мешает разобрать остальные
  * предметы того же архива - она просто логируется на уровне {@link ClothingLoader}.
+ * <p>
+ * Ничего из архива никогда не исполняется и не пишется на диск, а имена записей и размеры
+ * проверяются на входе - см. {@link ClothingArchiveSecurity}.
  */
 public final class ClothingArchiveParser {
 
@@ -61,6 +66,9 @@ public final class ClothingArchiveParser {
     private static final int REQUIRED_CAPE_WIDTH = 64;
     private static final int REQUIRED_CAPE_HEIGHT = 32;
 
+    /** Необязательный манифест архива - только в корне, см. {@link #readManifest}. */
+    private static final String MANIFEST_ENTRY_NAME = "manifest.json";
+
     private ClothingArchiveParser() {
     }
 
@@ -68,8 +76,9 @@ public final class ClothingArchiveParser {
      * Результат разбора одного {@code item.json} - либо готовое определение, либо ошибка.
      * Список содержит один элемент на каждый обнаруженный в JSON объект предмета.
      *
-     * @param warnings некритичные замечания (например, битый файл {@code lang/ru_ru.json}).
-     *                 Предмет при этом загружен, просто без соответствующего перевода.
+     * @param warnings некритичные замечания (например, битый файл {@code lang/ru_ru.json} или
+     *                 неизвестная версия в {@code manifest.json}). Предмет при этом загружен,
+     *                 просто с запасным вариантом вместо того, что не удалось разобрать.
      */
     public record ParsedEntry(ClothingDefinition definition, ClothingLoadException error, List<String> warnings) {
 
@@ -98,9 +107,38 @@ public final class ClothingArchiveParser {
         List<ParsedEntry> results = new ArrayList<>();
         String archiveName = archivePath.getFileName().toString();
 
+        try {
+            if (!ClothingArchiveSecurity.isArchiveFileSizeSafe(archivePath)) {
+                results.add(ParsedEntry.failed(new ClothingLoadException(
+                        ClothingLoadException.Reason.ARCHIVE_TOO_LARGE,
+                        "Архив '" + archiveName + "' превышает предельный размер файла "
+                                + ClothingArchiveSecurity.MAX_ARCHIVE_FILE_SIZE + " байт")));
+                return results;
+            }
+        } catch (IOException e) {
+            results.add(ParsedEntry.failed(new ClothingLoadException(
+                    ClothingLoadException.Reason.IO_ERROR,
+                    "Не удалось прочитать размер файла архива '" + archiveName + "': " + e.getMessage(), e)));
+            return results;
+        }
+
         try (ZipFile zip = new ZipFile(archivePath.toFile())) {
+            if (!ClothingArchiveSecurity.isEntryCountSafe(zip)) {
+                results.add(ParsedEntry.failed(new ClothingLoadException(
+                        ClothingLoadException.Reason.TOO_MANY_ENTRIES,
+                        "Архив '" + archiveName + "' содержит больше " + ClothingArchiveSecurity.MAX_ENTRY_COUNT
+                                + " записей")));
+                return results;
+            }
+
+            ClothingArchiveSecurity.ReadBudget budget =
+                    new ClothingArchiveSecurity.ReadBudget(ClothingArchiveSecurity.MAX_TOTAL_UNCOMPRESSED_SIZE);
+
+            ManifestResult manifestResult = readManifest(zip, archiveName, budget);
+
             List<ZipEntry> itemJsonEntries = zip.stream()
                     .filter(e -> !e.isDirectory())
+                    .filter(e -> ClothingArchiveSecurity.isEntryNameSafe(e.getName()))
                     .filter(e -> baseName(e.getName()).equalsIgnoreCase("item.json"))
                     .map(e -> (ZipEntry) e)
                     .toList();
@@ -114,7 +152,8 @@ public final class ClothingArchiveParser {
 
             for (ZipEntry itemJsonEntry : itemJsonEntries) {
                 String folder = folderOf(itemJsonEntry.getName());
-                results.addAll(parseItemJson(zip, itemJsonEntry, folder, archiveName));
+                results.addAll(parseItemJson(zip, itemJsonEntry, folder, archiveName,
+                        manifestResult.manifest(), manifestResult.warnings(), budget));
             }
         } catch (IOException e) {
             results.add(ParsedEntry.failed(new ClothingLoadException(
@@ -124,12 +163,80 @@ public final class ClothingArchiveParser {
         return results;
     }
 
+    /** {@code manifest.json} архива вместе с некритичными замечаниями к его разбору. */
+    private record ManifestResult(ClothingPackManifest manifest, List<String> warnings) {
+    }
+
+    /**
+     * Читает необязательный {@code manifest.json} из корня архива (в отличие от
+     * {@code item.json}, манифест один на весь архив и ищется только в корне, а не во
+     * вложенных папках). Отсутствие файла - обычный случай, даёт {@link ClothingPackManifest#DEFAULT}
+     * без предупреждений. Любая проблема с содержимым (некорректный JSON, неизвестная версия)
+     * тоже не считается ошибкой уровня архива - она просто откатывается на {@link
+     * ClothingPackFormat#LATEST} с предупреждением, которое прикладывается к каждому предмету
+     * этого архива.
+     */
+    private static ManifestResult readManifest(ZipFile zip, String archiveName,
+                                                ClothingArchiveSecurity.ReadBudget budget) {
+        ZipEntry entry = zip.stream()
+                .filter(e -> !e.isDirectory())
+                .filter(e -> ClothingArchiveSecurity.isEntryNameSafe(e.getName()))
+                .filter(e -> e.getName().equalsIgnoreCase(MANIFEST_ENTRY_NAME))
+                .map(e -> (ZipEntry) e)
+                .findFirst().orElse(null);
+        if (entry == null) {
+            return new ManifestResult(ClothingPackManifest.DEFAULT, List.of());
+        }
+
+        byte[] raw;
+        try {
+            raw = ClothingArchiveSecurity.readBounded(zip, entry, budget, archiveName);
+        } catch (IOException e) {
+            return new ManifestResult(ClothingPackManifest.DEFAULT,
+                    List.of("manifest.json не удалось прочитать (" + e.getMessage()
+                            + ") - используется последняя версия формата пака"));
+        }
+
+        JsonElement root;
+        try {
+            root = JsonParser.parseString(new String(raw, StandardCharsets.UTF_8));
+        } catch (JsonParseException e) {
+            return new ManifestResult(ClothingPackManifest.DEFAULT,
+                    List.of("manifest.json содержит некорректный JSON (" + firstLine(e.getMessage())
+                            + ") - используется последняя версия формата пака"));
+        }
+        if (!root.isJsonObject()) {
+            return new ManifestResult(ClothingPackManifest.DEFAULT,
+                    List.of("manifest.json должен быть объектом - используется последняя версия формата пака"));
+        }
+
+        JsonObject obj = root.getAsJsonObject();
+        if (!obj.has("format_version") || obj.get("format_version").isJsonNull()) {
+            return new ManifestResult(ClothingPackManifest.DEFAULT, List.of());
+        }
+        JsonElement versionEl = obj.get("format_version");
+        if (!versionEl.isJsonPrimitive() || !versionEl.getAsJsonPrimitive().isString()) {
+            return new ManifestResult(ClothingPackManifest.DEFAULT,
+                    List.of("поле 'format_version' в manifest.json должно быть строкой - используется "
+                            + "последняя версия формата пака"));
+        }
+        try {
+            ClothingPackFormat format = ClothingPackFormat.parse(versionEl.getAsString());
+            return new ManifestResult(new ClothingPackManifest(format), List.of());
+        } catch (IllegalArgumentException e) {
+            return new ManifestResult(ClothingPackManifest.DEFAULT,
+                    List.of("manifest.json: " + e.getMessage() + " - используется последняя версия формата пака"));
+        }
+    }
+
     private static List<ParsedEntry> parseItemJson(ZipFile zip, ZipEntry itemJsonEntry, String folder,
-                                                     String archiveName) {
+                                                     String archiveName, ClothingPackManifest manifest,
+                                                     List<String> manifestWarnings,
+                                                     ClothingArchiveSecurity.ReadBudget budget) {
         List<ParsedEntry> out = new ArrayList<>();
         JsonElement root;
         try {
-            byte[] raw = readEntry(zip, itemJsonEntry);
+            byte[] raw = ClothingArchiveSecurity.readBounded(zip, itemJsonEntry, budget, archiveName);
             root = JsonParser.parseString(new String(raw, StandardCharsets.UTF_8));
         } catch (IOException e) {
             out.add(ParsedEntry.failed(new ClothingLoadException(
@@ -164,16 +271,19 @@ public final class ClothingArchiveParser {
             return out;
         }
 
-        LangFiles langFiles = objects.isEmpty() ? LangFiles.EMPTY : readLangFiles(zip, folder, objects.size());
+        LangFiles langFiles = objects.isEmpty() ? LangFiles.EMPTY : readLangFiles(zip, folder, objects.size(), budget, archiveName);
         boolean singleItem = objects.size() == 1;
         for (JsonObject obj : objects) {
-            out.add(parseSingleDefinition(zip, obj, folder, archiveName, langFiles, singleItem));
+            out.add(parseSingleDefinition(zip, obj, folder, archiveName, langFiles, singleItem, manifest,
+                    manifestWarnings, budget));
         }
         return out;
     }
 
     private static ParsedEntry parseSingleDefinition(ZipFile zip, JsonObject obj, String folder, String archiveName,
-                                                       LangFiles langFiles, boolean singleItem) {
+                                                       LangFiles langFiles, boolean singleItem,
+                                                       ClothingPackManifest manifest, List<String> manifestWarnings,
+                                                       ClothingArchiveSecurity.ReadBudget budget) {
         try {
             String id = requireString(obj, "id");
             if (!ID_PATTERN.matcher(id).matches()) {
@@ -227,15 +337,18 @@ public final class ClothingArchiveParser {
                 }
             }
 
-            List<String> warnings = new ArrayList<>(langFiles.warnings());
+            List<String> warnings = new ArrayList<>(manifestWarnings);
+            warnings.addAll(langFiles.warnings());
             Map<String, ClothingTranslation> translations =
                     buildTranslations(obj, id, langFiles, singleItem, warnings);
 
             String textureFile = readOptionalString(obj, "texture", "texture.png", id);
             String iconFile = readOptionalString(obj, "icon", "icon.png", id);
+            requireSafeRelativeName(textureFile, "texture", id, archiveName);
+            requireSafeRelativeName(iconFile, "icon", id, archiveName);
 
             byte[] textureBytes = readSibling(zip, folder, textureFile, id, archiveName,
-                    ClothingLoadException.Reason.MISSING_TEXTURE);
+                    ClothingLoadException.Reason.MISSING_TEXTURE, budget);
             if (kind == ClothingKind.CAPE) {
                 validateCapeTextureSize(textureBytes, id, archiveName);
             } else {
@@ -243,18 +356,35 @@ public final class ClothingArchiveParser {
             }
 
             byte[] iconBytes = readSibling(zip, folder, iconFile, id, archiveName,
-                    ClothingLoadException.Reason.MISSING_ICON);
+                    ClothingLoadException.Reason.MISSING_ICON, budget);
             validateIsPng(iconBytes, id, archiveName);
 
             return ParsedEntry.ok(new ClothingDefinition(
                     id, name, description, slot, kind, armor, toughness, priority, textureBytes, iconBytes,
-                    archiveName, translations), warnings);
+                    archiveName, manifest.formatVersion(), translations), warnings);
         } catch (ClothingLoadException e) {
             return ParsedEntry.failed(e);
         } catch (RuntimeException e) {
             return ParsedEntry.failed(new ClothingLoadException(
                     ClothingLoadException.Reason.INVALID_JSON,
                     "Некорректное поле у предмета в архиве '" + archiveName + "': " + e.getMessage(), e));
+        }
+    }
+
+    /**
+     * Поля вроде {@code texture}/{@code icon} в item.json должны быть простыми относительными
+     * именами файлов, а не путём, выходящим за пределы архива - см. {@link
+     * ClothingArchiveSecurity#isEntryNameSafe}. Это не защита от чего-то реально
+     * эксплуатируемого (запись всё равно ищется только внутри самого zip, наружу он выйти не
+     * может), а гигиена входных данных: заведомо мусорное значение отклоняется сразу, а не
+     * молча даёт "файл не найден" где-то глубже.
+     */
+    private static void requireSafeRelativeName(String fileName, String field, String id, String archiveName)
+            throws ClothingLoadException {
+        if (!ClothingArchiveSecurity.isEntryNameSafe(fileName)) {
+            throw new ClothingLoadException(ClothingLoadException.Reason.UNSAFE_ENTRY_NAME,
+                    "Поле '" + field + "' у предмета '" + id + "' в архиве '" + archiveName
+                            + "' должно быть простым относительным именем файла, а не '" + fileName + "'");
         }
     }
 
@@ -273,10 +403,12 @@ public final class ClothingArchiveParser {
      * просматриваются. Всё в этой папке необязательно: отсутствие папки - нормальный случай,
      * а нечитаемый файл только даёт предупреждение и пропускается, но не ломает предмет.
      */
-    private static LangFiles readLangFiles(ZipFile zip, String folder, int itemCount) {
+    private static LangFiles readLangFiles(ZipFile zip, String folder, int itemCount,
+                                            ClothingArchiveSecurity.ReadBudget budget, String archiveName) {
         String prefix = (folder.isEmpty() ? "" : folder + "/") + LANG_FOLDER + "/";
         List<ZipEntry> candidates = zip.stream()
                 .filter(e -> !e.isDirectory())
+                .filter(e -> ClothingArchiveSecurity.isEntryNameSafe(e.getName()))
                 .filter(e -> e.getName().length() > prefix.length()
                         && e.getName().regionMatches(true, 0, prefix, 0, prefix.length()))
                 .filter(e -> e.getName().indexOf('/', prefix.length()) < 0)
@@ -300,7 +432,7 @@ public final class ClothingArchiveParser {
             }
             try {
                 JsonElement root = JsonParser.parseString(
-                        new String(readEntry(zip, entry), StandardCharsets.UTF_8));
+                        new String(ClothingArchiveSecurity.readBounded(zip, entry, budget, archiveName), StandardCharsets.UTF_8));
                 if (!root.isJsonObject()) {
                     warnings.add("файл перевода '" + entry.getName() + "' пропущен: корень должен быть объектом "
                             + "вида {\"name\": \"...\", \"description\": [\"...\"]}");
@@ -522,14 +654,16 @@ public final class ClothingArchiveParser {
     }
 
     private static byte[] readSibling(ZipFile zip, String folder, String fileName, String id, String archiveName,
-                                       ClothingLoadException.Reason missingReason) throws ClothingLoadException {
+                                       ClothingLoadException.Reason missingReason,
+                                       ClothingArchiveSecurity.ReadBudget budget) throws ClothingLoadException {
         String fullPath = folder.isEmpty() ? fileName : folder + "/" + fileName;
         ZipEntry entry = zip.getEntry(fullPath);
-        if (entry == null) {
+        if (entry == null || !ClothingArchiveSecurity.isEntryNameSafe(entry.getName())) {
             // Дополнительно пробуем найти файл с этим именем где угодно в архиве -
             // упрощает жизнь авторам, кладущим texture.png/icon.png не строго рядом с item.json.
             entry = zip.stream()
                     .filter(e -> !e.isDirectory())
+                    .filter(e -> ClothingArchiveSecurity.isEntryNameSafe(e.getName()))
                     .filter(e -> baseName(e.getName()).equalsIgnoreCase(fileName))
                     .findFirst().orElse(null);
         }
@@ -538,7 +672,7 @@ public final class ClothingArchiveParser {
                     "Не найден файл '" + fileName + "' для предмета '" + id + "' в архиве '" + archiveName + "'");
         }
         try {
-            return readEntry(zip, entry);
+            return ClothingArchiveSecurity.readBounded(zip, entry, budget, archiveName);
         } catch (IOException e) {
             throw new ClothingLoadException(ClothingLoadException.Reason.IO_ERROR,
                     "Не удалось прочитать '" + fileName + "' для предмета '" + id + "' в архиве '" + archiveName
@@ -593,14 +727,6 @@ public final class ClothingArchiveParser {
         } catch (IOException e) {
             throw new ClothingLoadException(reasonOnFailure,
                     "Некорректный PNG у предмета '" + id + "' в архиве '" + archiveName + "': " + e.getMessage(), e);
-        }
-    }
-
-    private static byte[] readEntry(ZipFile zip, ZipEntry entry) throws IOException {
-        try (InputStream in = zip.getInputStream(entry)) {
-            ByteArrayOutputStream buffer = new ByteArrayOutputStream(Math.max(64, (int) entry.getSize()));
-            in.transferTo(buffer);
-            return buffer.toByteArray();
         }
     }
 

@@ -1,15 +1,52 @@
 # Clothing Pack Format
 
-A clothing pack is a ZIP archive placed in `.minecraft/clothes/`.
+A clothing pack is a ZIP archive placed in `.minecraft/clothes/`, with the extension
+**`.cloth`**. The older **`.zip`** extension still works and is scanned the same way, for packs
+made before the `.cloth` switch - there's no format difference between the two, only the
+extension. New packs should use `.cloth`.
 
 ## Minimal pack
 
 ```text
-my_pack.zip
+my_pack.cloth
 ├── item.json
 ├── texture.png
 └── icon.png
 ```
+
+## Pack manifest (optional)
+
+An archive may have a `manifest.json` at its **root** (next to `item.json`, not inside an
+item's own folder):
+
+```json
+{
+  "format_version": "1.1"
+}
+```
+
+`format_version` declares which pack format the archive was written against. It's entirely
+optional - no `manifest.json`, or one without `format_version`, defaults to the current format
+(currently `1.1`). Right now `1.0` (pre-`.cloth`) and `1.1` (current) parse `item.json`
+identically; the version exists so a pack can pin itself to older behavior if a future format
+change needs one. An unrecognized value falls back to the current format with a warning in the
+log, rather than failing the whole archive.
+
+## Archive limits
+
+A handful of limits protect the game from a malformed or hostile archive - normal packs (a
+handful of small PNGs and JSON files) are nowhere near any of them:
+
+| Limit | Value |
+|---|---|
+| Archive file size on disk | 64 MiB |
+| Entries per archive | 2000 |
+| Uncompressed size of one entry | 32 MiB |
+| Total uncompressed size per archive | 128 MiB |
+
+An archive over these limits is skipped entirely (logged as a warning), the same as any other
+unreadable archive. Nothing from an archive is ever executed or written to disk - parsing only
+ever produces JSON text and image bytes held in memory.
 
 ## Example
 
@@ -80,12 +117,12 @@ Any other string is **not** rejected at load time - the item is still parsed
 and registered, but there's no matching Curios slot for a player to put it
 into, so it can never actually be equipped. Stick to the identifiers above.
 
-## Multiple items in one ZIP
+## Multiple items in one archive
 
 An archive may contain multiple `item.json` files in different directories. Files are resolved relative to each `item.json`:
 
 ```text
-uniform_pack.zip
+uniform_pack.cloth
 ├── officer/
 │   ├── item.json
 │   ├── texture.png
@@ -198,4 +235,10 @@ For `type: "cape"`:
   pixels 1,1 to 11,17 - the same template used for vanilla Mojang capes).
 - Alpha transparency is supported.
 - `layer` is not applicable and is ignored if present.
+
+## Extending this with an addon mod
+
+If you're writing a separate mod (rather than a pack), see [ADDON_API.md](ADDON_API.md) for the
+hooks this mod exposes - adding clothing programmatically, patching packs found on disk, and
+overriding cape rendering.
 
