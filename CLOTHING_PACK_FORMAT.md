@@ -94,20 +94,20 @@ below), but nothing enforces that - as with any other slot, it's just what
 `slot` must be one of the identifiers the mod currently registers for players
 (`data/dynamic_clothing_system/curios/entities/players.json`):
 
-| Slot | Display name | Typical use |
-|---|---|---|
-| `head` | Head | Hats, helmets, hoods |
-| `face` | Face | Glasses, masks, face paint |
-| `neck` | Neck | Scarves, ties, necklaces |
-| `body` | Torso | Shirts, coats, frocks |
-| `jacket` | Jacket | Jackets, blazers worn over `body` |
-| `legs` | Legs | Trousers, skirts |
-| `feet` | Feet | Boots, shoes |
-| `hands` | Hands | Gloves |
-| `accessory` | Accessory | Anything that doesn't fit the slots above |
-| `back` | Back | Capes (`type: "cape"`, see above) |
+| Slot | Display name | Typical use | Also fits vanilla slot |
+|---|---|---|---|
+| `head` | Head | Hats, helmets, hoods | Helmet |
+| `face` | Face | Glasses, masks, face paint | Helmet |
+| `neck` | Neck | Scarves, ties, necklaces | Helmet |
+| `body` | Torso | Shirts, coats, frocks | Chestplate |
+| `jacket` | Jacket | Jackets, blazers worn over `body` | Chestplate |
+| `legs` | Legs | Trousers, skirts | Leggings |
+| `feet` | Feet | Boots, shoes | Boots |
+| `hands` | Hands | Gloves | - |
+| `accessory` | Accessory | Anything that doesn't fit the slots above | - |
+| `back` | Back | Capes (`type: "cape"`, see above) | Chestplate |
 
-`slot` only controls **where** the item is equipped in the Curios inventory. It
+`slot` controls **where** the item is equipped: its own Curios slot, plus the vanilla armor slot from the last column of the table above (if it has one - `hands` and `accessory` are Curios-only). It
 does **not** control visual stacking order - that's what `layer` is for (see
 below). An item's `slot` and `layer` are independent, e.g. a `jacket` can use
 the `outer` layer and a `body` item can also use `outer` if it should render

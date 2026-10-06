@@ -1,7 +1,9 @@
 package com.sandydev.dcs.clothing;
 
 import com.sandydev.dcs.SandysDynamicClothing;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import org.slf4j.Logger;
@@ -36,10 +38,20 @@ public final class ClothingItems {
     public static void registerAll(Logger logger) {
         for (ClothingDefinition definition : ClothingRegistry.get().getAllDefinitions()) {
             DeferredItem<ClothingItem> holder = ITEMS.register(definition.id(),
-                    () -> new ClothingItem(definition, new Item.Properties().stacksTo(1)));
+                    () -> new ClothingItem(definition, createProperties(definition)));
             HOLDERS.put(definition.id(), holder);
         }
         logger.info("[DynamicClothingSystem] Поставлено на регистрацию {} предметов одежды", HOLDERS.size());
+    }
+
+    private static Item.Properties createProperties(ClothingDefinition definition) {
+        Item.Properties properties = new Item.Properties().stacksTo(1);
+        // Броня для случая, когда одежда лежит в ванильном слоте (а не в Curios).
+        ItemAttributeModifiers worn = ClothingVanillaSlots.buildWornModifiers(definition);
+        if (worn != null) {
+            properties.component(DataComponents.ATTRIBUTE_MODIFIERS, worn);
+        }
+        return properties;
     }
 
     /**

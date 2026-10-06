@@ -1,5 +1,6 @@
 package com.sandydev.dcs.clothing;
 
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -10,11 +11,13 @@ import top.theillusivec4.curios.api.type.inventory.ICurioStacksHandler;
 import top.theillusivec4.curios.api.type.inventory.IDynamicStackHandler;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
- * Что из одежды сейчас надето на существе - тонкая обёртка над Curios.
+ * Что из одежды сейчас надето на существе - тонкая обёртка над Curios и ванильными слотами брони.
  * Общий код для сервера и клиента, поэтому клиентских классов (NativeImage,
  * Minecraft.getInstance() и т.п.) здесь быть не должно.
  */
@@ -62,9 +65,16 @@ public final class ClothingManager {
         return Optional.empty();
     }
 
-    /** Все распознанные определения одежды, надетые в Curios-слоты - без сортировки и без фильтрации по типу. */
+    /**
+     * Все распознанные определения одежды, надетые на существо - и в Curios-слоты, и в ванильные
+     * слоты брони (см. {@link ClothingVanillaSlots}) - без сортировки и без фильтрации по типу.
+     * <p>
+     * Один и тот же предмет, надетый сразу в двух местах (например, в Curios-слоте и в ванильном),
+     * возвращается один раз: второй экземпляр не добавил бы к внешнему виду ничего нового.
+     */
     private static List<ClothingDefinition> getAllEquippedDefinitions(LivingEntity entity) {
-        List<ClothingDefinition> result = new ArrayList<>();
+        Map<String, ClothingDefinition> result = new LinkedHashMap<>();
+
         CuriosApi.getCuriosInventory(entity).ifPresent(handler -> {
             for (ICurioStacksHandler stacksHandler : handler.getCurios().values()) {
                 IDynamicStackHandler stacks = stacksHandler.getStacks();
@@ -74,7 +84,7 @@ public final class ClothingManager {
                         continue;
                     }
                     ClothingRegistry.get().getDefinitionForItem(stack.getItem()).ifPresentOrElse(
-                            result::add,
+                            definition -> result.putIfAbsent(definition.id(), definition),
                             () -> {
                                 if (Config.DEBUG_LOGGING.get()) {
                                     SandysDynamicClothing.LOGGER.debug(
@@ -85,7 +95,23 @@ public final class ClothingManager {
                 }
             }
         });
-        return result;
+
+        // Ванильные слоты брони. Берём предмет только если он лежит именно в "своём" слоте по
+        // таблице сопоставления: одежду, оказавшуюся в чужой ячейке (например, через команду
+        // /item replace), не рисуем, чтобы правило "руки и аксессуары - только свои слоты" не обходилось.
+        for (EquipmentSlot slot : ClothingVanillaSlots.ARMOR_SLOTS) {
+            ItemStack stack = entity.getItemBySlot(slot);
+            if (stack.isEmpty()) {
+                continue;
+            }
+            ClothingRegistry.get().getDefinitionForItem(stack.getItem()).ifPresent(definition -> {
+                if (ClothingVanillaSlots.forClothingSlot(definition.slot()) == slot) {
+                    result.putIfAbsent(definition.id(), definition);
+                }
+            });
+        }
+
+        return new ArrayList<>(result.values());
     }
 
 }

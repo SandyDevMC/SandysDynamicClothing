@@ -201,6 +201,11 @@ public final class ClothingIconPackWriter {
                 + "  \"parent\": \"item/generated\",\n"
                 + "  \"textures\": {\n"
                 + "    \"layer0\": \"" + SandysDynamicClothing.MODID + ":item/" + id + "\"\n"
+                + "  },\n"
+                // Одежда в ванильном слоте шлема: CustomHeadLayer рисует на голове любой не-ArmorItem
+                // как плоскую иконку. Одежда рисуется скином, поэтому иконку на голове скрываем.
+                + "  \"display\": {\n"
+                + "    \"head\": { \"scale\": [0.0001, 0.0001, 0.0001] }\n"
                 + "  }\n"
                 + "}\n";
     }

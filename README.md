@@ -9,6 +9,7 @@ Clothing is loaded from simple ZIP archives, equipped through Curios, and compos
 - Dynamic clothing textures composited onto the player's current skin.
 - Capes (`type: "cape"`) rendered as a plain cape-texture swap - no skin compositing involved.
 - Curios slots for clothing.
+- Clothing can also be worn in the vanilla armor slots (helmet / chestplate / leggings / boots) - see [Vanilla armor slots](#vanilla-armor-slots).
 - Seven simple visual layers: `under`, `shirt`, `base`, `vest`, `jacket`, `coat`, `outer`.
 - Optional legacy numeric `priority` for precise ordering.
 - Multiple clothing items can be supplied by a single CLOTH archive
@@ -132,3 +133,15 @@ rule.
 
 `slot` controls **where** the item is equipped. `layer` controls **how it is composited** (for `type: "skin"` items only). They are independent.
 
+## Vanilla armor slots
+
+Besides its own Curios slot from `item.json`, a clothing item can also be put into the matching
+**vanilla armor slot** (drag it into the armor slot in the inventory, or shift-click it):
+
+| `slot` in `item.json` | Vanilla armor slot |
+|---|---|
+| `head`, `neck`, `face` | Helmet |
+| `body`, `jacket`, `back` | Chestplate |
+| `legs` | Leggings |
+| `feet` | Boots |
+| `hands`, `accessory` | none - Curios slot only |

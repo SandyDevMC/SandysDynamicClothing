@@ -3,6 +3,7 @@ package com.sandydev.dcs.clothing;
 import net.minecraft.ChatFormatting;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.core.Holder;
@@ -22,9 +23,13 @@ import java.util.List;
 /**
  * Обычный {@link Item}, представляющий один предмет одежды.
  * <p>
- * Не является ArmorItem: экипировка происходит исключительно через Curios.
- * Защита реализуется стандартными ванильными атрибутами {@code ARMOR} и {@code ARMOR_TOUGHNESS},
- * которые Curios применяет к носителю надетого предмета.
+ * Не является ArmorItem. Надевается в свой Curios-слот из {@code item.json}, а также - по
+ * таблице {@link ClothingVanillaSlots} - в соответствующий ванильный слот брони
+ * (см. {@link #getEquipmentSlot}).
+ * <p>
+ * Защита реализуется стандартными ванильными атрибутами {@code ARMOR} и {@code ARMOR_TOUGHNESS}:
+ * в Curios-слоте их применяет Curios (см. {@link #getAttributeModifiers}), в ванильном слоте -
+ * компонент {@code ATTRIBUTE_MODIFIERS}, который выставляет {@link ClothingItems}.
  * <p>
  * Совместимость со слотом дополнительно проверяется через {@link #canEquip} в самом предмете,
  * а datapack-валидатор остаётся резервным механизмом на стороне Curios.
@@ -72,6 +77,19 @@ public class ClothingItem extends Item implements ICurioItem {
     @Override
     public boolean canEquip(SlotContext slotContext, ItemStack stack) {
         return slotContext != null && definition.slot().equals(slotContext.identifier());
+    }
+
+    /**
+     * Ванильный слот брони, в который можно надеть этот предмет, или {@code null}, если такого
+     * нет (тогда NeoForge откатывается на штатную логику, и предмет в слоты брони не ложится).
+     * <p>
+     * Этот хук читают и инвентарь игрока (можно положить предмет в ячейку брони, shift+клик
+     * отправляет его туда же), и остальной ванильный код, спрашивающий
+     * {@code LivingEntity#getEquipmentSlotForItem}.
+     */
+    @Override
+    public EquipmentSlot getEquipmentSlot(ItemStack stack) {
+        return ClothingVanillaSlots.forClothingSlot(definition.slot());
     }
 
     @Override
