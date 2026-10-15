@@ -32,6 +32,10 @@ Dynamic player-skin clothing for NeoForge. Clothing packs are loaded from ZIP fi
 [[mixins]]
 config="${mod_id}.mixins.json"
 
+# Straw Statues, подключается только если мод установлен
+[[mixins]]
+config="${mod_id}.straw_statues.mixins.json"
+
 #[[accessTransformers]]
 #file="META-INF/accesstransformer.cfg"
 

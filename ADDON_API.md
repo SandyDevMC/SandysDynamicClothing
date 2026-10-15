@@ -92,3 +92,6 @@ public static void onCapeTexture(ClothingCapeTextureEvent event) {
 
 This fires potentially every frame per visible player - keep the handler cheap (no I/O, no
 network, no heavy computation).
+
+The event is player-only: capes on [Straw Statues](README.md#straw-statues-support) statues are
+resolved from the statue's equipped clothing alone and the event is not fired for them.

@@ -7,7 +7,8 @@
   "client": [
     "PlayerRendererMixin",
     "AbstractClientPlayerMixin",
-    "PlayerModelPartMixin"
+    "PlayerModelPartMixin",
+    "CustomHeadLayerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

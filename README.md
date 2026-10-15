@@ -145,3 +145,9 @@ Besides its own Curios slot from `item.json`, a clothing item can also be put in
 | `legs` | Leggings |
 | `feet` | Boots |
 | `hands`, `accessory` | none - Curios slot only |
+
+## Straw Statues
+
+If [Straw Statues](https://modrinth.com/mod/straw-statues) is installed, clothing is drawn on its
+statues. Put it on a statue the same way as on an armor stand - through the vanilla armor slots (see
+[Vanilla armor slots](#vanilla-armor-slots)). The mod is optional and needs no configuration.

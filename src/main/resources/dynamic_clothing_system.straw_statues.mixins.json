@@ -1,0 +1,13 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "com.sandydev.dcs.compat.mixin",
+  "plugin": "com.sandydev.dcs.compat.StrawStatuesMixinPlugin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "StrawStatueRendererMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}
