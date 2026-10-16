@@ -55,6 +55,75 @@ public record ClothingDefinition(
         byte[] iconBytes,
         String sourceArchive,
         ClothingPackFormat packFormat,
-        java.util.Map<String, ClothingTranslation> translations
+        java.util.Map<String, ClothingTranslation> translations,
+        java.util.Map<Integer, ClothingStyle> styles
 ) {
+
+    /** Наибольший допустимый номер стиля (в имени файла - не больше двух цифр). */
+    public static final int MAX_STYLE_NUMBER = 99;
+
+    public ClothingDefinition {
+        // Отсортированная неизменяемая копия: порядок переключения стилей - по возрастанию номера.
+        styles = styles == null || styles.isEmpty()
+                ? java.util.Map.of()
+                : java.util.Collections.unmodifiableSortedMap(new java.util.TreeMap<>(styles));
+    }
+
+    /**
+     * Прежняя сигнатура без стилей - оставлена, чтобы аддоны, собирающие определения в коде
+     * (см. ADDON_API.md), продолжали компилироваться без изменений.
+     */
+    public ClothingDefinition(String id, String name, List<String> description, String slot, ClothingKind kind,
+                              int armor, double toughness, int priority, byte[] textureBytes, byte[] iconBytes,
+                              String sourceArchive, ClothingPackFormat packFormat,
+                              java.util.Map<String, ClothingTranslation> translations) {
+        this(id, name, description, slot, kind, armor, toughness, priority, textureBytes, iconBytes,
+                sourceArchive, packFormat, translations, java.util.Map.of());
+    }
+
+    /** Есть ли у предмета стили помимо стиля 0 - то есть есть ли что переключать. */
+    public boolean hasStyles() {
+        return !styles.isEmpty();
+    }
+
+    /** Наибольший номер стиля предмета; 0, если стилей нет. */
+    public int maxStyle() {
+        return styles.isEmpty() ? 0 : java.util.Collections.max(styles.keySet());
+    }
+
+    /**
+     * Приводит номер стиля из стака к существующему: если такого стиля у предмета нет (пак на этом
+     * клиенте старее, стиль удалили, значение выставили командой) - возвращается 0, то есть
+     * основной вид, а не ошибка.
+     */
+    public int resolveStyle(int requested) {
+        return requested > 0 && styles.containsKey(requested) ? requested : 0;
+    }
+
+    /** Текстура указанного стиля; для 0 и несуществующих номеров - основная текстура предмета. */
+    public byte[] textureBytesForStyle(int style) {
+        ClothingStyle entry = style > 0 ? styles.get(style) : null;
+        return entry != null ? entry.textureBytes() : textureBytes;
+    }
+
+    /** Иконка указанного стиля; если у стиля нет своей иконки - иконка предмета по умолчанию. */
+    public byte[] iconBytesForStyle(int style) {
+        ClothingStyle entry = style > 0 ? styles.get(style) : null;
+        return entry != null && entry.hasOwnIcon() ? entry.iconBytes() : iconBytes;
+    }
+
+    /** Следующий стиль по кругу: 0 -> наименьший номер -> ... -> наибольший -> снова 0. */
+    public int nextStyle(int current) {
+        for (int number : styles.keySet()) {
+            if (number > current) {
+                return number;
+            }
+        }
+        return 0;
+    }
+
+    /** Есть ли хотя бы у одного стиля собственная иконка (нужно ли генерировать модели-оверрайды). */
+    public boolean hasStyleIcons() {
+        return styles.values().stream().anyMatch(ClothingStyle::hasOwnIcon);
+    }
 }

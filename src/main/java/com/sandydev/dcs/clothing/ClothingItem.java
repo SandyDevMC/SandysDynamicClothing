@@ -3,7 +3,13 @@ package com.sandydev.dcs.clothing;
 import net.minecraft.ChatFormatting;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.SlotAccess;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.ClickAction;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.core.Holder;
@@ -33,6 +39,10 @@ import java.util.List;
  * <p>
  * Совместимость со слотом дополнительно проверяется через {@link #canEquip} в самом предмете,
  * а datapack-валидатор остаётся резервным механизмом на стороне Curios.
+ * <p>
+ * Если у предмета есть дополнительные стили ({@link ClothingDefinition#hasStyles()}), их можно
+ * переключать правым кликом по предмету в любом инвентаре - см. {@link #overrideOtherStackedOnMe}.
+ * Выбранный стиль лежит в компоненте {@link ClothingComponents#STYLE}.
  */
 public class ClothingItem extends Item implements ICurioItem {
 
@@ -116,12 +126,56 @@ public class ClothingItem extends Item implements ICurioItem {
         return modifiers;
     }
 
+    /**
+     * Правый клик по предмету в инвентаре переключает его стиль на следующий по кругу
+     * (0 -> 1 -> ... -> последний -> 0).
+     * <p>
+     * Хук вызывается ванильным {@code AbstractContainerMenu#doClick} для предмета, лежащего в ячейке,
+     * когда по нему кликнули (ПКМ) с пустым курсором - в обычном инвентаре, в окне Curios, в сундуках и
+     * т.д. Он выполняется и на клиенте (для мгновенного отклика), и на сервере (авторитетно), а
+     * результат уходит остальным клиентам тем же путём, что и любое изменение предмета, - отдельных
+     * пакетов не нужно. Если курсор не пуст, клик обрабатывается как обычно (взять/поменять местами).
+     * <p>
+     * Возвращает {@code true} только когда стиль реально переключён, чтобы ванильный ПКМ
+     * ("взять половину стака") не сработал следом и не унёс предмет на курсор.
+     */
+    @Override
+    public boolean overrideOtherStackedOnMe(ItemStack stack, ItemStack other, Slot slot, ClickAction action,
+                                             Player player, SlotAccess access) {
+        if (action != ClickAction.SECONDARY || !other.isEmpty() || !definition.hasStyles()) {
+            return false;
+        }
+        if (!slot.allowModification(player)) {
+            return false;
+        }
+
+        int next = definition.nextStyle(definition.resolveStyle(ClothingComponents.getStyle(stack)));
+        // Записываем копию через slot.set, а не меняем стак на месте: так ячейка (в том числе Curios-слот)
+        // узнаёт об изменении и разошлёт его наблюдателям.
+        ItemStack updated = stack.copy();
+        ClothingComponents.setStyle(updated, next);
+        slot.set(updated);
+
+        if (player.level().isClientSide()) {
+            player.level().playLocalSound(player.getX(), player.getY(), player.getZ(),
+                    SoundEvents.ARMOR_EQUIP_LEATHER.value(), SoundSource.PLAYERS, 0.6F, 1.1F, false);
+        }
+        return true;
+    }
+
     @Override
     public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltip,
                                  TooltipFlag flag) {
         super.appendHoverText(stack, context, tooltip, flag);
         for (String line : localizedDescription()) {
             tooltip.add(Component.literal(line).withStyle(ChatFormatting.GRAY));
+        }
+        if (definition.hasStyles()) {
+            int style = definition.resolveStyle(ClothingComponents.getStyle(stack));
+            tooltip.add(Component.translatable("tooltip." + SandysDynamicClothing.MODID + ".style",
+                    style, definition.maxStyle()).withStyle(ChatFormatting.AQUA));
+            tooltip.add(Component.translatable("tooltip." + SandysDynamicClothing.MODID + ".style_hint")
+                    .withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC));
         }
         // Слот, броня и твёрдость брони не дублируются вручную: Curios сам добавляет
         // стандартный блок информации для экипировки и её атрибутов. Наш предмет отвечает

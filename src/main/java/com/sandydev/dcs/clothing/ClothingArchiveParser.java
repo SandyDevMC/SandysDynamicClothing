@@ -13,10 +13,14 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -36,6 +40,11 @@ import java.util.zip.ZipFile;
  * <p>
  * Необязательный {@code manifest.json} в корне архива объявляет версию формата пака - см.
  * {@link #readManifest} и {@link ClothingPackFormat}.
+ * <p>
+ * Необязательные дополнительные стили (варианты текстуры) подхватываются по имени файла - к имени
+ * основной текстуры дописывается номер ({@code texture1.png}, {@code texture2.png}, ...) - либо
+ * перечисляются явно полем {@code styles} в {@code item.json}, см. {@link #readStyles}.
+ * Стили - это дополнение: проблема в файле стиля никогда не отменяет загрузку предмета.
  * <p>
  * Необязательные переводы лежат в подпапке {@code lang/} рядом с {@code item.json}
  * ({@code lang/en_us.json}, {@code lang/ru_ru.json}, ...) - см. {@link #readLangFiles}.
@@ -273,9 +282,10 @@ public final class ClothingArchiveParser {
 
         LangFiles langFiles = objects.isEmpty() ? LangFiles.EMPTY : readLangFiles(zip, folder, objects.size(), budget, archiveName);
         boolean singleItem = objects.size() == 1;
+        Set<String> reservedFiles = collectReservedFileNames(objects, folder);
         for (JsonObject obj : objects) {
             out.add(parseSingleDefinition(zip, obj, folder, archiveName, langFiles, singleItem, manifest,
-                    manifestWarnings, budget));
+                    manifestWarnings, reservedFiles, budget));
         }
         return out;
     }
@@ -283,6 +293,7 @@ public final class ClothingArchiveParser {
     private static ParsedEntry parseSingleDefinition(ZipFile zip, JsonObject obj, String folder, String archiveName,
                                                        LangFiles langFiles, boolean singleItem,
                                                        ClothingPackManifest manifest, List<String> manifestWarnings,
+                                                       Set<String> reservedFiles,
                                                        ClothingArchiveSecurity.ReadBudget budget) {
         try {
             String id = requireString(obj, "id");
@@ -347,21 +358,27 @@ public final class ClothingArchiveParser {
             requireSafeRelativeName(textureFile, "texture", id, archiveName);
             requireSafeRelativeName(iconFile, "icon", id, archiveName);
 
-            byte[] textureBytes = readSibling(zip, folder, textureFile, id, archiveName,
+            Found textureFound = readSibling(zip, folder, textureFile, id, archiveName,
                     ClothingLoadException.Reason.MISSING_TEXTURE, budget);
+            byte[] textureBytes = textureFound.bytes();
             if (kind == ClothingKind.CAPE) {
                 validateCapeTextureSize(textureBytes, id, archiveName);
             } else {
                 validateTextureSize(textureBytes, id, archiveName);
             }
 
-            byte[] iconBytes = readSibling(zip, folder, iconFile, id, archiveName,
+            Found iconFound = readSibling(zip, folder, iconFile, id, archiveName,
                     ClothingLoadException.Reason.MISSING_ICON, budget);
+            byte[] iconBytes = iconFound.bytes();
             validateIsPng(iconBytes, id, archiveName);
+
+            Map<Integer, ClothingStyle> styles = readStyles(zip, obj, id, archiveName, kind, folder,
+                    textureFile, textureFound.entryName(), iconFile, iconFound.entryName(),
+                    reservedFiles, budget, warnings);
 
             return ParsedEntry.ok(new ClothingDefinition(
                     id, name, description, slot, kind, armor, toughness, priority, textureBytes, iconBytes,
-                    archiveName, manifest.formatVersion(), translations), warnings);
+                    archiveName, manifest.formatVersion(), translations, styles), warnings);
         } catch (ClothingLoadException e) {
             return ParsedEntry.failed(e);
         } catch (RuntimeException e) {
@@ -653,7 +670,11 @@ public final class ClothingArchiveParser {
         }
     }
 
-    private static byte[] readSibling(ZipFile zip, String folder, String fileName, String id, String archiveName,
+    /** Прочитанный файл вместе с полным именем записи, под которым он найден в архиве. */
+    private record Found(String entryName, byte[] bytes) {
+    }
+
+    private static Found readSibling(ZipFile zip, String folder, String fileName, String id, String archiveName,
                                        ClothingLoadException.Reason missingReason,
                                        ClothingArchiveSecurity.ReadBudget budget) throws ClothingLoadException {
         String fullPath = folder.isEmpty() ? fileName : folder + "/" + fileName;
@@ -672,11 +693,255 @@ public final class ClothingArchiveParser {
                     "Не найден файл '" + fileName + "' для предмета '" + id + "' в архиве '" + archiveName + "'");
         }
         try {
-            return ClothingArchiveSecurity.readBounded(zip, entry, budget, archiveName);
+            return new Found(entry.getName(),
+                    ClothingArchiveSecurity.readBounded(zip, entry, budget, archiveName));
         } catch (IOException e) {
             throw new ClothingLoadException(ClothingLoadException.Reason.IO_ERROR,
                     "Не удалось прочитать '" + fileName + "' для предмета '" + id + "' в архиве '" + archiveName
                             + "': " + e.getMessage(), e);
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Стили (варианты текстуры)
+    // ---------------------------------------------------------------------------------------
+
+    /**
+     * Полные (с папкой, в нижнем регистре) имена файлов, которые {@code item.json} прямо отдаёт под
+     * текстуры/иконки/стили - своих предметов или соседних предметов той же папки. Автопоиск стилей
+     * ({@code texture1.png}) их не трогает: иначе в папке с несколькими предметами, где один
+     * использует {@code a.png}, а другой {@code a2.png}, второй предмет по ошибке стал бы
+     * «стилем 2» первого.
+     */
+    private static Set<String> collectReservedFileNames(List<JsonObject> objects, String folder) {
+        Set<String> reserved = new HashSet<>();
+        for (JsonObject o : objects) {
+            reserved.add(reservedPath(folder, stringOrNull(o, "texture"), "texture.png"));
+            reserved.add(reservedPath(folder, stringOrNull(o, "icon"), "icon.png"));
+            JsonElement styles = o.get("styles");
+            if (styles != null && styles.isJsonObject()) {
+                for (Map.Entry<String, JsonElement> e : styles.getAsJsonObject().entrySet()) {
+                    JsonElement v = e.getValue();
+                    if (v.isJsonPrimitive() && v.getAsJsonPrimitive().isString()) {
+                        reserved.add(reservedPath(folder, v.getAsString(), null));
+                    } else if (v.isJsonObject()) {
+                        reserved.add(reservedPath(folder, stringOrNull(v.getAsJsonObject(), "texture"), null));
+                        reserved.add(reservedPath(folder, stringOrNull(v.getAsJsonObject(), "icon"), null));
+                    }
+                }
+            }
+        }
+        reserved.remove(null);
+        return reserved;
+    }
+
+    private static String reservedPath(String folder, String name, String defaultName) {
+        String chosen = name != null && !name.isBlank() ? name.trim() : defaultName;
+        if (chosen == null) {
+            return null;
+        }
+        return (folder.isEmpty() ? chosen : folder + "/" + chosen).toLowerCase(Locale.ROOT);
+    }
+
+    private static String stringOrNull(JsonObject obj, String field) {
+        JsonElement el = obj.get(field);
+        return el != null && el.isJsonPrimitive() && el.getAsJsonPrimitive().isString() ? el.getAsString() : null;
+    }
+
+    /**
+     * Дополнительные стили предмета (стиль 0 - сам предмет, его тут нет). Два способа, не смешиваются:
+     * <ol>
+     *   <li><b>Явный</b> - поле {@code styles} в {@code item.json}: объект, где ключ - номер стиля, а
+     *       значение - имя файла текстуры либо {@code {"texture": "...", "icon": "..."}}. Имена
+     *       произвольные, ищутся так же, как {@code texture}/{@code icon}. Если поле есть, автопоиск
+     *       для этого предмета не выполняется.</li>
+     *   <li><b>По имени</b> (по умолчанию) - к имени основной текстуры дописывается номер: у
+     *       {@code texture.png} стили - {@code texture1.png}, {@code texture2.png}; у предмета с
+     *       {@code "texture": "officer.png"} - {@code officer1.png}, {@code officer2.png}. Так же и для
+     *       иконки: {@code icon1.png} (или {@code <имя иконки>1.png}) - своя иконка стиля 1. Файлы
+     *       ищутся в той же папке, где лежит основная текстура.</li>
+     * </ol>
+     * Любая проблема с файлом стиля (битый PNG, не тот размер, нечитаемый файл) только пропускает
+     * этот стиль и даёт предупреждение - предмет с остальными стилями загружается.
+     */
+    private static Map<Integer, ClothingStyle> readStyles(ZipFile zip, JsonObject obj, String id,
+                                                            String archiveName, ClothingKind kind, String folder,
+                                                            String textureFile, String textureEntryName,
+                                                            String iconFile, String iconEntryName,
+                                                            Set<String> reservedFiles,
+                                                            ClothingArchiveSecurity.ReadBudget budget,
+                                                            List<String> warnings) {
+        Map<Integer, ClothingStyle> result = new TreeMap<>();
+        JsonElement explicit = obj.get("styles");
+        if (explicit != null && !explicit.isJsonNull()) {
+            readExplicitStyles(zip, explicit, id, archiveName, kind, folder, budget, warnings, result);
+        } else {
+            readNamedStyles(zip, id, archiveName, kind, textureFile, textureEntryName, iconFile, iconEntryName,
+                    reservedFiles, budget, warnings, result);
+        }
+        return result;
+    }
+
+    private static void readExplicitStyles(ZipFile zip, JsonElement explicit, String id, String archiveName,
+                                             ClothingKind kind, String folder,
+                                             ClothingArchiveSecurity.ReadBudget budget, List<String> warnings,
+                                             Map<Integer, ClothingStyle> result) {
+        if (!explicit.isJsonObject()) {
+            warnings.add("предмет '" + id + "': поле 'styles' должно быть объектом вида "
+                    + "{\"1\": \"red.png\"} - стили проигнорированы");
+            return;
+        }
+        for (Map.Entry<String, JsonElement> entry : explicit.getAsJsonObject().entrySet()) {
+            int number = parseStyleNumber(entry.getKey());
+            if (number < 1) {
+                warnings.add("предмет '" + id + "': ключ стиля '" + entry.getKey() + "' пропущен - нужен номер от 1 до "
+                        + ClothingDefinition.MAX_STYLE_NUMBER + " (стиль 0 - это основная текстура предмета)");
+                continue;
+            }
+            JsonElement value = entry.getValue();
+            String textureName;
+            String iconName = null;
+            if (value.isJsonPrimitive() && value.getAsJsonPrimitive().isString()) {
+                textureName = value.getAsString().trim();
+            } else if (value.isJsonObject()) {
+                textureName = stringOrNull(value.getAsJsonObject(), "texture");
+                iconName = stringOrNull(value.getAsJsonObject(), "icon");
+            } else {
+                warnings.add("предмет '" + id + "': стиль " + number
+                        + " пропущен - значение должно быть именем файла или объектом {\"texture\": \"...\"}");
+                continue;
+            }
+            if (textureName == null || textureName.isBlank()) {
+                warnings.add("предмет '" + id + "': стиль " + number + " пропущен - не указана текстура");
+                continue;
+            }
+            try {
+                requireSafeRelativeName(textureName.trim(), "styles." + number + ".texture", id, archiveName);
+                Found texture = readSibling(zip, folder, textureName.trim(), id, archiveName,
+                        ClothingLoadException.Reason.MISSING_TEXTURE, budget);
+                validateStyleTexture(kind, texture.bytes(), id, archiveName);
+
+                byte[] icon = null;
+                if (iconName != null && !iconName.isBlank()) {
+                    try {
+                        requireSafeRelativeName(iconName.trim(), "styles." + number + ".icon", id, archiveName);
+                        Found iconFound = readSibling(zip, folder, iconName.trim(), id, archiveName,
+                                ClothingLoadException.Reason.MISSING_ICON, budget);
+                        validateIsPng(iconFound.bytes(), id, archiveName);
+                        icon = iconFound.bytes();
+                    } catch (ClothingLoadException iconError) {
+                        warnings.add("предмет '" + id + "': иконка стиля " + number + " пропущена ("
+                                + iconError.getMessage() + ") - останется иконка по умолчанию");
+                    }
+                }
+                result.put(number, new ClothingStyle(number, texture.bytes(), icon));
+            } catch (ClothingLoadException e) {
+                warnings.add("предмет '" + id + "': стиль " + number + " (файл '" + textureName.trim()
+                        + "') пропущен: " + e.getMessage());
+            }
+        }
+    }
+
+    private static void readNamedStyles(ZipFile zip, String id, String archiveName, ClothingKind kind,
+                                          String textureFile, String textureEntryName,
+                                          String iconFile, String iconEntryName, Set<String> reservedFiles,
+                                          ClothingArchiveSecurity.ReadBudget budget, List<String> warnings,
+                                          Map<Integer, ClothingStyle> result) {
+        Map<Integer, ZipEntry> textureEntries = findNumberedEntries(zip, textureFile, textureEntryName, reservedFiles);
+        for (Map.Entry<Integer, ZipEntry> found : textureEntries.entrySet()) {
+            int number = found.getKey();
+            ZipEntry entry = found.getValue();
+            if (number < 1) {
+                warnings.add("предмет '" + id + "': файл '" + entry.getName() + "' пропущен - стиль 0 это основная "
+                        + "текстура предмета, нумерация стилей начинается с 1");
+                continue;
+            }
+            if (result.containsKey(number)) {
+                warnings.add("предмет '" + id + "': файл '" + entry.getName() + "' пропущен - стиль " + number
+                        + " уже задан другим файлом");
+                continue;
+            }
+            try {
+                byte[] bytes = ClothingArchiveSecurity.readBounded(zip, entry, budget, archiveName);
+                validateStyleTexture(kind, bytes, id, archiveName);
+                result.put(number, new ClothingStyle(number, bytes, null));
+            } catch (IOException e) {
+                warnings.add("предмет '" + id + "': стиль " + number + " ('" + entry.getName()
+                        + "') пропущен: не удалось прочитать файл (" + e.getMessage() + ")");
+            } catch (ClothingLoadException e) {
+                warnings.add("предмет '" + id + "': стиль " + number + " (файл '" + entry.getName()
+                        + "') пропущен: " + e.getMessage());
+            }
+        }
+        if (result.isEmpty()) {
+            return;
+        }
+
+        // Иконки стилей - только для тех номеров, у которых есть текстура.
+        for (Map.Entry<Integer, ZipEntry> found : findNumberedEntries(zip, iconFile, iconEntryName, reservedFiles).entrySet()) {
+            ClothingStyle style = result.get(found.getKey());
+            if (style == null || style.hasOwnIcon()) {
+                continue;
+            }
+            try {
+                byte[] bytes = ClothingArchiveSecurity.readBounded(zip, found.getValue(), budget, archiveName);
+                validateIsPng(bytes, id, archiveName);
+                result.put(style.number(), new ClothingStyle(style.number(), style.textureBytes(), bytes));
+            } catch (IOException | ClothingLoadException e) {
+                warnings.add("предмет '" + id + "': иконка стиля " + style.number() + " ('"
+                        + found.getValue().getName() + "') пропущена (" + e.getMessage()
+                        + ") - останется иконка по умолчанию");
+            }
+        }
+    }
+
+    /**
+     * Файлы вида {@code <имя><число><расширение>} рядом с базовым файлом: для {@code texture.png} -
+     * {@code texture1.png}, {@code texture12.png}. Число - одна или две цифры. Результат отсортирован по числу.
+     * Файлы из {@code reservedFiles} (явно названные в item.json) не считаются стилями.
+     */
+    private static Map<Integer, ZipEntry> findNumberedEntries(ZipFile zip, String baseFileName,
+                                                                String baseEntryName, Set<String> reservedFiles) {
+        String fileName = baseName(baseFileName);
+        int dot = fileName.lastIndexOf('.');
+        String stem = dot > 0 ? fileName.substring(0, dot) : fileName;
+        String extension = dot > 0 ? fileName.substring(dot) : "";
+        Pattern pattern = Pattern.compile("^" + Pattern.quote(stem) + "(\\d{1,2})" + Pattern.quote(extension) + "$",
+                Pattern.CASE_INSENSITIVE);
+        String directory = folderOf(baseEntryName);
+
+        Map<Integer, ZipEntry> byNumber = new TreeMap<>();
+        zip.stream()
+                .filter(e -> !e.isDirectory())
+                .filter(e -> ClothingArchiveSecurity.isEntryNameSafe(e.getName()))
+                .filter(e -> folderOf(e.getName()).equalsIgnoreCase(directory))
+                .filter(e -> !reservedFiles.contains(e.getName().toLowerCase(Locale.ROOT)))
+                .sorted(java.util.Comparator.comparing(ZipEntry::getName))
+                .forEach(e -> {
+                    Matcher matcher = pattern.matcher(baseName(e.getName()));
+                    if (matcher.matches()) {
+                        // putIfAbsent: texture1.png и texture01.png - один и тот же номер, берём первый по имени.
+                        byNumber.putIfAbsent(Integer.parseInt(matcher.group(1)), (ZipEntry) e);
+                    }
+                });
+        return byNumber;
+    }
+
+    private static int parseStyleNumber(String key) {
+        String trimmed = key.trim();
+        if (!trimmed.matches("\\d{1,2}")) {
+            return -1;
+        }
+        int number = Integer.parseInt(trimmed);
+        return number >= 1 && number <= ClothingDefinition.MAX_STYLE_NUMBER ? number : -1;
+    }
+
+    private static void validateStyleTexture(ClothingKind kind, byte[] pngBytes, String id, String archiveName)
+            throws ClothingLoadException {
+        if (kind == ClothingKind.CAPE) {
+            validateCapeTextureSize(pngBytes, id, archiveName);
+        } else {
+            validateTextureSize(pngBytes, id, archiveName);
         }
     }
 

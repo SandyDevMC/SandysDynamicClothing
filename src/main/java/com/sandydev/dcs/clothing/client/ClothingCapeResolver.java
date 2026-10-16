@@ -8,7 +8,7 @@ import net.neoforged.neoforge.common.NeoForge;
 
 /**
  * Разрешает cape-текстуру игрока: сперва по надетому через Curios плащу (см. {@link
- * ClothingManager#getEquippedCape}), затем даёт аддонам последнее слово через {@link
+ * ClothingManager#getEquippedCapeWorn}), затем даёт аддонам последнее слово через {@link
  * ClothingCapeTextureEvent} на {@link NeoForge#EVENT_BUS}.
  * <p>
  * Вынесено в отдельный метод, а не продублировано в каждом mixin'е, чтобы {@code
@@ -24,7 +24,7 @@ public final class ClothingCapeResolver {
 
     /** @return итоговая cape-текстура для этого игрока, или {@code null}, если плащ показывать не нужно. */
     public static ResourceLocation resolve(AbstractClientPlayer player) {
-        ResourceLocation resolved = ClothingManager.getEquippedCape(player)
+        ResourceLocation resolved = ClothingManager.getEquippedCapeWorn(player)
                 .map(ClothingCapeTextureCache::getOrRegister)
                 .orElse(null);
 

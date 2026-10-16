@@ -27,6 +27,26 @@ public final class ClothingManager {
     }
 
     /**
+     * Надетый предмет одежды вместе с выбранным на нём стилем.
+     * <p>
+     * Стиль хранится в стаке (см. {@link ClothingComponents#STYLE}), а не в {@link ClothingDefinition}:
+     * два экземпляра одной одежды могут быть в разных стилях. {@code style} здесь уже приведён к
+     * существующему ({@link ClothingDefinition#resolveStyle}), так что {@link #textureBytes()} всегда
+     * возвращает реальную текстуру.
+     */
+    public record Worn(ClothingDefinition definition, int style) {
+
+        public String id() {
+            return definition.id();
+        }
+
+        /** Текстура выбранного стиля (для стиля 0 - основная текстура предмета). */
+        public byte[] textureBytes() {
+            return definition.textureBytesForStyle(style);
+        }
+    }
+
+    /**
      * Все надетые в Curios-слоты предметы одежды типа {@link ClothingKind#SKIN} данного
      * существа, отсортированные по возрастанию внутреннего priority (обычно полученного из
      * ClothingLayer) - именно в этом порядке их нужно накладывать на скин (нижний слой первым,
@@ -34,13 +54,21 @@ public final class ClothingManager {
      * {@link #getEquippedCape}.
      */
     public static List<ClothingDefinition> getEquippedClothingSortedByPriority(LivingEntity entity) {
-        List<ClothingDefinition> result = new ArrayList<>();
-        for (ClothingDefinition definition : getAllEquippedDefinitions(entity)) {
-            if (definition.kind() == ClothingKind.SKIN) {
-                result.add(definition);
+        return getEquippedWornSortedByPriority(entity).stream().map(Worn::definition).toList();
+    }
+
+    /**
+     * То же, что {@link #getEquippedClothingSortedByPriority}, но с выбранным стилем каждого предмета -
+     * именно это нужно композитору скина, чтобы взять текстуру нужного стиля.
+     */
+    public static List<Worn> getEquippedWornSortedByPriority(LivingEntity entity) {
+        List<Worn> result = new ArrayList<>();
+        for (Worn worn : getAllEquipped(entity)) {
+            if (worn.definition().kind() == ClothingKind.SKIN) {
+                result.add(worn);
             }
         }
-        result.sort((a, b) -> Integer.compare(a.priority(), b.priority()));
+        result.sort((a, b) -> Integer.compare(a.definition().priority(), b.definition().priority()));
         return result;
     }
 
@@ -57,9 +85,14 @@ public final class ClothingManager {
      * найденный.
      */
     public static Optional<ClothingDefinition> getEquippedCape(LivingEntity entity) {
-        for (ClothingDefinition definition : getAllEquippedDefinitions(entity)) {
-            if (definition.kind() == ClothingKind.CAPE) {
-                return Optional.of(definition);
+        return getEquippedCapeWorn(entity).map(Worn::definition);
+    }
+
+    /** Как {@link #getEquippedCape}, но с выбранным на плаще стилем. */
+    public static Optional<Worn> getEquippedCapeWorn(LivingEntity entity) {
+        for (Worn worn : getAllEquipped(entity)) {
+            if (worn.definition().kind() == ClothingKind.CAPE) {
+                return Optional.of(worn);
             }
         }
         return Optional.empty();
@@ -70,10 +103,11 @@ public final class ClothingManager {
      * слоты брони (см. {@link ClothingVanillaSlots}) - без сортировки и без фильтрации по типу.
      * <p>
      * Один и тот же предмет, надетый сразу в двух местах (например, в Curios-слоте и в ванильном),
-     * возвращается один раз: второй экземпляр не добавил бы к внешнему виду ничего нового.
+     * возвращается один раз (с тем стилем, что найден первым - Curios раньше ванильных слотов): второй
+     * экземпляр не добавил бы к внешнему виду ничего нового.
      */
-    private static List<ClothingDefinition> getAllEquippedDefinitions(LivingEntity entity) {
-        Map<String, ClothingDefinition> result = new LinkedHashMap<>();
+    private static List<Worn> getAllEquipped(LivingEntity entity) {
+        Map<String, Worn> result = new LinkedHashMap<>();
 
         CuriosApi.getCuriosInventory(entity).ifPresent(handler -> {
             for (ICurioStacksHandler stacksHandler : handler.getCurios().values()) {
@@ -84,7 +118,7 @@ public final class ClothingManager {
                         continue;
                     }
                     ClothingRegistry.get().getDefinitionForItem(stack.getItem()).ifPresentOrElse(
-                            definition -> result.putIfAbsent(definition.id(), definition),
+                            definition -> result.putIfAbsent(definition.id(), worn(definition, stack)),
                             () -> {
                                 if (Config.DEBUG_LOGGING.get()) {
                                     SandysDynamicClothing.LOGGER.debug(
@@ -106,12 +140,16 @@ public final class ClothingManager {
             }
             ClothingRegistry.get().getDefinitionForItem(stack.getItem()).ifPresent(definition -> {
                 if (ClothingVanillaSlots.forClothingSlot(definition.slot()) == slot) {
-                    result.putIfAbsent(definition.id(), definition);
+                    result.putIfAbsent(definition.id(), worn(definition, stack));
                 }
             });
         }
 
         return new ArrayList<>(result.values());
+    }
+
+    private static Worn worn(ClothingDefinition definition, ItemStack stack) {
+        return new Worn(definition, definition.resolveStyle(ClothingComponents.getStyle(stack)));
     }
 
 }

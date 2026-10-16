@@ -33,5 +33,7 @@
   "curios.identifier.back": "Back",
   "curios.modifiers.back": "When on back:",
   "tooltip.dynamic_clothing_system.armor": "Armor: %s",
-  "tooltip.dynamic_clothing_system.armor_toughness": "Armor Toughness: %s"
+  "tooltip.dynamic_clothing_system.armor_toughness": "Armor Toughness: %s",
+  "tooltip.dynamic_clothing_system.style": "Style: %s/%s",
+  "tooltip.dynamic_clothing_system.style_hint": "Right-click in inventory to change style"
 }

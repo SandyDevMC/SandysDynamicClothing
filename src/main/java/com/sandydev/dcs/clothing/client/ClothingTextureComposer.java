@@ -1,7 +1,7 @@
 package com.sandydev.dcs.clothing.client;
 
 import com.mojang.blaze3d.platform.NativeImage;
-import com.sandydev.dcs.clothing.ClothingDefinition;
+import com.sandydev.dcs.clothing.ClothingManager.Worn;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -104,15 +104,16 @@ public final class ClothingTextureComposer {
      * и промежуточных изображений одежды (сам метод закрывает то, что декодирует сам).
      *
      * @param originalSkin        оригинальный скин игрока (64x64), не модифицируется.
-     * @param equippedByPriority  надетая одежда, ОБЯЗАТЕЛЬНО отсортированная по возрастанию
-     *                            priority (см. {@code ClothingManager#getEquippedClothingSortedByPriority}).
+     * @param equippedByPriority  надетая одежда (с выбранным стилем каждого предмета), ОБЯЗАТЕЛЬНО
+     *                            отсортированная по возрастанию priority (см.
+     *                            {@code ClothingManager#getEquippedWornSortedByPriority}).
      */
-    public static NativeImage compose(NativeImage originalSkin, List<ClothingDefinition> equippedByPriority) {
+    public static NativeImage compose(NativeImage originalSkin, List<Worn> equippedByPriority) {
         NativeImage result = new NativeImage(NativeImage.Format.RGBA, SKIN_SIZE, SKIN_SIZE, false);
         copyInto(originalSkin, result);
 
-        for (ClothingDefinition definition : equippedByPriority) {
-            applyLayer(result, definition);
+        for (Worn worn : equippedByPriority) {
+            applyLayer(result, worn);
         }
         return result;
     }
@@ -127,10 +128,10 @@ public final class ClothingTextureComposer {
         }
     }
 
-    private static void applyLayer(NativeImage result, ClothingDefinition definition) {
+    private static void applyLayer(NativeImage result, Worn worn) {
         NativeImage clothing;
         try {
-            clothing = NativeImage.read(new ByteArrayInputStream(definition.textureBytes()));
+            clothing = NativeImage.read(new ByteArrayInputStream(worn.textureBytes()));
         } catch (IOException e) {
             // Уже провалидировано ClothingArchiveParser при загрузке архива - сюда доходить не должно,
             // но на всякий случай не роняем рендер игрока из-за одного повреждённого предмета.
@@ -144,7 +145,7 @@ public final class ClothingTextureComposer {
              *
              * Раньше очистка шла сразу после setPixelRGBA(). При таком порядке пиксели
              * overlay самой же одежды успевали записаться раньше соответствующего base-пикселя
-             * и затем стирались. На левой штанине это проявлялось особенно заметно.
+             * и затем стирались.
              */
             clearMappedOverlaysForLayer(result, clothing);
 

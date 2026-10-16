@@ -3,8 +3,8 @@ package com.sandydev.dcs.clothing.client;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.sandydev.dcs.SandysDynamicClothing;
 import com.sandydev.dcs.Config;
-import com.sandydev.dcs.clothing.ClothingDefinition;
 import com.sandydev.dcs.clothing.ClothingManager;
+import com.sandydev.dcs.clothing.ClothingManager.Worn;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.texture.AbstractTexture;
@@ -84,7 +84,7 @@ public final class ClothingTextureCache {
     }
 
     private ResourceLocation getOverrideLocation(LivingEntity entity, Supplier<ResourceLocation> baseSkinSupplier) {
-        List<ClothingDefinition> equipped = ClothingManager.getEquippedClothingSortedByPriority(entity);
+        List<Worn> equipped = ClothingManager.getEquippedWornSortedByPriority(entity);
         UUID playerId = entity.getUUID();
 
         if (equipped.isEmpty()) {
@@ -104,7 +104,7 @@ public final class ClothingTextureCache {
         if (!signature.equals(entry.signature) && Config.DEBUG_LOGGING.get()) {
             SandysDynamicClothing.LOGGER.info(
                     "[DCS][CACHE] player={} состояние изменилось: skin={} clothing={}",
-                    describe(entity), baseSkin, equipped.stream().map(ClothingDefinition::id).toList());
+                    describe(entity), baseSkin, describeWorn(equipped));
         }
 
         ResourceLocation rebuilt = rebuild(entity, baseSkin, equipped, playerId, signature);
@@ -168,7 +168,7 @@ public final class ClothingTextureCache {
     }
 
     private ResourceLocation rebuild(LivingEntity entity, ResourceLocation baseSkin,
-                                      List<ClothingDefinition> equipped, UUID playerId, String signature) {
+                                      List<Worn> equipped, UUID playerId, String signature) {
         BaseSkin base = loadBaseSkin(baseSkin);
         if (base == null) {
             String failureKey = entity.getUUID() + "|" + signature;
@@ -202,7 +202,7 @@ public final class ClothingTextureCache {
         Minecraft.getInstance().getTextureManager().register(location, new DynamicTexture(composed));
         SandysDynamicClothing.LOGGER.info(
                 "[DCS][RENDER] player={} composed skin={} clothing={}",
-                describe(entity), location, equipped.stream().map(ClothingDefinition::id).toList());
+                describe(entity), location, describeWorn(equipped));
         return location;
     }
 
@@ -292,11 +292,20 @@ public final class ClothingTextureCache {
         return null;
     }
 
-    private String buildSignature(ResourceLocation baseSkin, List<ClothingDefinition> equipped) {
+    /**
+     * «Подпись» состояния: скин + надетая одежда + выбранный стиль каждого предмета. Стиль входит в
+     * подпись, поэтому переключение стиля (своё или чужое, пришедшее с сервера) само пересобирает
+     * текстуру при ближайшем кадре - никаких отдельных событий не нужно.
+     */
+    private String buildSignature(ResourceLocation baseSkin, List<Worn> equipped) {
         StringBuilder sb = new StringBuilder(baseSkin.toString());
-        for (ClothingDefinition definition : equipped) {
-            sb.append('|').append(definition.id());
+        for (Worn worn : equipped) {
+            sb.append('|').append(worn.id()).append('#').append(worn.style());
         }
         return sb.toString();
+    }
+
+    private static List<String> describeWorn(List<Worn> equipped) {
+        return equipped.stream().map(w -> w.style() == 0 ? w.id() : w.id() + "#" + w.style()).toList();
     }
 }

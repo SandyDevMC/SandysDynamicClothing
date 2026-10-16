@@ -1,5 +1,6 @@
 package com.sandydev.dcs;
 
+import com.sandydev.dcs.clothing.ClothingComponents;
 import com.sandydev.dcs.clothing.ClothingItems;
 import com.sandydev.dcs.clothing.ClothingLoader;
 import com.sandydev.dcs.clothing.ClothingRegistry;
@@ -61,6 +62,8 @@ public class SandysDynamicClothing {
         // произойдёт позже, в onConstructMod) - сама подписка DeferredRegister на шину не
         // зависит от того, есть ли уже в нём записи, поэтому её можно сделать прямо сейчас.
         ClothingItems.ITEMS.register(modEventBus);
+        // Компонент данных «style» (выбранный стиль одежды) - см. ClothingComponents.
+        ClothingComponents.COMPONENTS.register(modEventBus);
         CREATIVE_MODE_TABS.register(modEventBus);
 
         // Curios использует наш валидатор при загрузке данных слотов, поэтому регистрируем

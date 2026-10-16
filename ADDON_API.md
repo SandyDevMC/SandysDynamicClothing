@@ -72,6 +72,10 @@ public static void onDefinitionsCollected(ClothingDefinitionsCollectedEvent even
 }
 ```
 
+`ClothingDefinition` has a `styles` component (a `Map<Integer, ClothingStyle>` of extra texture
+variants, see [Styles](CLOTHING_PACK_FORMAT.md#styles-texture-variants)). The older constructor without
+it still exists and means "no styles", so existing addon code keeps compiling.
+
 If two definitions end up with the same `id`, the **last** one in the list wins - so to override
 an existing item, remove it and re-add your own version (or just append yours after it).
 

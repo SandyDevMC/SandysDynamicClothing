@@ -37,7 +37,7 @@ public final class ClothingStatueRenderHooks {
         if (!(statue instanceof LivingEntity entity) || original == null) {
             return original;
         }
-        ResourceLocation cape = ClothingManager.getEquippedCape(entity)
+        ResourceLocation cape = ClothingManager.getEquippedCapeWorn(entity)
                 .map(ClothingCapeTextureCache::getOrRegister)
                 .orElse(null);
         if (cape == null) {

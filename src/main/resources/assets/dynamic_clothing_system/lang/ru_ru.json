@@ -33,5 +33,7 @@
   "curios.identifier.back": "Спина",
   "curios.modifiers.back": "Когда на спине:",
   "tooltip.dynamic_clothing_system.armor": "Броня: %s",
-  "tooltip.dynamic_clothing_system.armor_toughness": "Твёрдость брони: %s"
+  "tooltip.dynamic_clothing_system.armor_toughness": "Твёрдость брони: %s",
+  "tooltip.dynamic_clothing_system.style": "Стиль: %s/%s",
+  "tooltip.dynamic_clothing_system.style_hint": "ПКМ в инвентаре - сменить стиль"
 }

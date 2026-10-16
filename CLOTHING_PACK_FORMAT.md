@@ -220,6 +220,92 @@ still works (names only). If a `lang/` file sets the same field for the same lan
 }
 ```
 
+## Styles (texture variants)
+
+One item can have several looks - **styles**. The player switches between them by
+**right-clicking the item in an inventory** (player inventory, the Curios screen, chests, ...) with an
+empty cursor; every click moves to the next style and, after the last one, back to the first. The
+current style is shown in the item's tooltip (`Style: 2/4`) and is stored in the item itself, so it
+stays with the item and is visible to other players.
+
+The numbering is simple: the texture you already have is **style 0**, and every further style is the
+same file name with the style number appended:
+
+```text
+winter_coat/
+├── item.json
+├── texture.png      <- style 0 (what the item always looked like)
+├── texture1.png     <- style 1
+├── texture2.png     <- style 2
+├── icon.png         <- inventory icon of style 0
+└── icon2.png        <- optional: own inventory icon for style 2
+```
+
+- Styles need no changes in `item.json`. An item with a single `texture.png` behaves exactly as before.
+- A style texture must meet the same requirements as the base texture (64×64 for `skin`, 64×32 for
+  `cape`). The number is one or two digits, `1`-`99`. Gaps are fine (`texture1.png` and `texture3.png`
+  give styles 1 and 3); the number in the file name is the style number, it never shifts.
+- `iconN.png` is optional. A style without its own icon keeps the item's normal icon.
+- Styles are looked up **only in the folder of the item's base texture**, so every item folder is
+  independent from the others.
+- A broken style file (not a PNG, wrong size) only skips that one style and writes a warning to the
+  log; the item and its other styles still load.
+
+**Custom file names.** If `item.json` names its own files, the same rule applies to *those* names -
+the number is appended to the name you chose:
+
+```json
+{
+  "id": "officer",
+  "name": "Officer Uniform",
+  "slot": "body",
+  "texture": "officer_texture.png",
+  "icon": "officer_icon.png"
+}
+```
+
+```text
+officer/
+├── item.json
+├── officer_texture.png     <- style 0
+├── officer_texture1.png    <- style 1
+├── officer_texture2.png    <- style 2
+├── officer_icon.png
+└── officer_icon2.png       <- icon of style 2
+```
+
+Files that `item.json` already names for an item (as `texture`, `icon` or in `styles`) are never
+mistaken for a style of another item in the same folder - e.g. with `"texture": "a.png"` for one
+item and `"texture": "a2.png"` for another, `a2.png` is not "style 2 of `a.png`".
+
+**Explicit `styles`.** When the file names don't follow the numbering at all, list the styles in
+`item.json` instead. The key is the style number, the value is a texture file name, or an object with
+`texture` and optionally `icon`:
+
+```json
+{
+  "id": "officer",
+  "name": "Officer Uniform",
+  "slot": "body",
+  "styles": {
+    "1": "officer_red.png",
+    "2": { "texture": "officer_blue.png", "icon": "officer_blue_icon.png" }
+  }
+}
+```
+
+If `styles` is present, the numbered-file lookup is **not** used for that item. Style 0 stays the
+item's `texture`/`texture.png`.
+
+**Good to know**
+
+- The style is part of the item (a data component), so it is kept when the item is moved, equipped by
+  right-clicking it in the world, or put on a Straw Statues statue.
+- Switching works in survival and creative inventories. In the *creative item picker* tabs the click
+  picks up a fresh copy as usual - take the item first, then right-click it in your inventory.
+- Every player needs the same pack. If a client doesn't have a style that the item uses, it shows
+  style 0 instead.
+
 ## Texture requirements
 
 For `type: "skin"` (default):

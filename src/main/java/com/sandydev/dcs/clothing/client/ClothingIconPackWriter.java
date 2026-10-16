@@ -4,6 +4,7 @@ import com.sandydev.dcs.SandysDynamicClothing;
 import com.sandydev.dcs.clothing.ClothingDefinition;
 import com.sandydev.dcs.clothing.ClothingLang;
 import com.sandydev.dcs.clothing.ClothingRegistry;
+import com.sandydev.dcs.clothing.ClothingStyle;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.packs.PackLocationInfo;
 import net.minecraft.server.packs.PackSelectionConfig;
@@ -34,11 +35,20 @@ import java.nio.file.Path;
  * <p>
  * Каждый запуск игры пак перегенерируется с нуля, чтобы всегда отражать актуальное содержимое
  * {@code .minecraft/clothes/}.
+ * <p>
+ * Иконки стилей (см. {@link ClothingDefinition#styles()}) кладутся в подпапки {@code styles/<id>/<номер>}
+ * рядом с основной иконкой, а модель предмета получает {@code overrides} по свойству
+ * {@code dynamic_clothing_system:style} (его отдаёт клиент, см. {@code SandysDynamicClothingClient}).
+ * Оверрайды пишутся только у предметов, у которых хотя бы у одного стиля есть своя иконка, - у
+ * остальных модель остаётся ровно такой же, как раньше.
  */
 public final class ClothingIconPackWriter {
 
     public static final String PACK_DIR_NAME = "dynamic_clothing_system_dynamic";
     private static final int PACK_FORMAT = 34; // соответствует 1.21-1.21.1
+
+    /** Подпапка для иконок и моделей стилей внутри {@code textures/item} и {@code models/item}. */
+    private static final String STYLES_DIR = "styles";
 
     private ClothingIconPackWriter() {
     }
@@ -58,12 +68,15 @@ public final class ClothingIconPackWriter {
             deleteGeneratedFiles(texturesDir, ".png");
             deleteGeneratedFiles(modelsDir, ".json");
             deleteGeneratedFiles(langDir, ".json");
+            deleteRecursively(texturesDir.resolve(STYLES_DIR));
+            deleteRecursively(modelsDir.resolve(STYLES_DIR));
 
             int written = 0;
             for (ClothingDefinition definition : ClothingRegistry.get().getAllDefinitions()) {
                 Files.write(texturesDir.resolve(definition.id() + ".png"), definition.iconBytes());
-                Files.writeString(modelsDir.resolve(definition.id() + ".json"), itemModelJson(definition.id()),
+                Files.writeString(modelsDir.resolve(definition.id() + ".json"), itemModelJson(definition),
                         StandardCharsets.UTF_8);
+                writeStyleIcons(definition, texturesDir, modelsDir);
                 written++;
             }
             // Имена и описания: базовый текст из item.json уходит в en_us (запасной слой для всех
@@ -196,17 +209,86 @@ public final class ClothingIconPackWriter {
         return out.toString();
     }
 
-    private static String itemModelJson(String id) {
+    /** Пишет иконки и модели стилей предмета, у которых есть своя иконка (стиль без иконки модели не требует). */
+    private static void writeStyleIcons(ClothingDefinition definition, Path texturesDir, Path modelsDir)
+            throws IOException {
+        if (!definition.hasStyleIcons()) {
+            return;
+        }
+        Path styleTextures = texturesDir.resolve(STYLES_DIR).resolve(definition.id());
+        Path styleModels = modelsDir.resolve(STYLES_DIR).resolve(definition.id());
+        Files.createDirectories(styleTextures);
+        Files.createDirectories(styleModels);
+        for (ClothingStyle style : definition.styles().values()) {
+            if (!style.hasOwnIcon()) {
+                continue;
+            }
+            Files.write(styleTextures.resolve(style.number() + ".png"), style.iconBytes());
+            Files.writeString(styleModels.resolve(style.number() + ".json"),
+                    modelJson(styleTextureRef(definition.id(), style.number()), ""), StandardCharsets.UTF_8);
+        }
+    }
+
+    private static void deleteRecursively(Path directory) throws IOException {
+        if (!Files.isDirectory(directory)) {
+            return;
+        }
+        try (var walk = Files.walk(directory)) {
+            for (Path path : (Iterable<Path>) walk.sorted(java.util.Comparator.reverseOrder())::iterator) {
+                Files.deleteIfExists(path);
+            }
+        }
+    }
+
+    private static String baseTextureRef(String id) {
+        return SandysDynamicClothing.MODID + ":item/" + id;
+    }
+
+    private static String styleTextureRef(String id, int number) {
+        return SandysDynamicClothing.MODID + ":item/" + STYLES_DIR + "/" + id + "/" + number;
+    }
+
+    private static String itemModelJson(ClothingDefinition definition) {
+        return modelJson(baseTextureRef(definition.id()), overridesJson(definition));
+    }
+
+    /**
+     * {@code overrides} модели предмета: для каждого номера стиля - модель его иконки (или основная
+     * модель, если у стиля своей иконки нет). Предикат {@code style >= N} срабатывает по принципу
+     * «последний подходящий побеждает», поэтому номера идут по возрастанию, а явно перечислены все
+     * стили, включая без иконки, - иначе стиль без иконки подхватил бы иконку предыдущего номера.
+     * Стиль 0 оверрайда не требует: ни один предикат не срабатывает, остаётся основная модель.
+     */
+    private static String overridesJson(ClothingDefinition definition) {
+        if (!definition.hasStyleIcons()) {
+            return "";
+        }
+        StringBuilder out = new StringBuilder();
+        for (ClothingStyle style : definition.styles().values()) {
+            String model = style.hasOwnIcon()
+                    ? styleTextureRef(definition.id(), style.number())
+                    : baseTextureRef(definition.id());
+            if (!out.isEmpty()) {
+                out.append(",\n");
+            }
+            out.append("    { \"predicate\": { \"").append(SandysDynamicClothing.MODID).append(":style\": ")
+                    .append(style.number()).append(" }, \"model\": \"").append(model).append("\" }");
+        }
+        return out.toString();
+    }
+
+    private static String modelJson(String textureRef, String overrides) {
         return "{\n"
                 + "  \"parent\": \"item/generated\",\n"
                 + "  \"textures\": {\n"
-                + "    \"layer0\": \"" + SandysDynamicClothing.MODID + ":item/" + id + "\"\n"
+                + "    \"layer0\": \"" + textureRef + "\"\n"
                 + "  },\n"
                 // Одежда в ванильном слоте шлема: CustomHeadLayer рисует на голове любой не-ArmorItem
                 // как плоскую иконку. Одежда рисуется скином, поэтому иконку на голове скрываем.
                 + "  \"display\": {\n"
                 + "    \"head\": { \"scale\": [0.0001, 0.0001, 0.0001] }\n"
-                + "  }\n"
+                + "  }"
+                + (overrides.isEmpty() ? "\n" : ",\n  \"overrides\": [\n" + overrides + "\n  ]\n")
                 + "}\n";
     }
 }

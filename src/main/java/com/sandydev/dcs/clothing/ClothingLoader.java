@@ -82,7 +82,7 @@ public final class ClothingLoader {
                 }
                 for (String warning : entry.warnings()) {
                     if (warnedInArchive.add(warning)) {
-                        logger.warn("[DynamicClothingSystem] Локализация в архиве '{}': {}",
+                        logger.warn("[DynamicClothingSystem] Замечание по архиву '{}': {}",
                                 archive.getFileName(), warning);
                     }
                 }
@@ -112,10 +112,10 @@ public final class ClothingLoader {
             ClothingRegistry.get().register(definition);
             loaded++;
             logger.info("[DynamicClothingSystem] Загружена одежда '{}' (тип={}, слот={}, броня={}, твёрдость={}, "
-                            + "priority={}, формат={}, переводы={}) из '{}'",
+                            + "priority={}, формат={}, переводы={}, стили={}) из '{}'",
                     definition.id(), definition.kind(), definition.slot(), definition.armor(), definition.toughness(),
                     definition.priority(), definition.packFormat(), definition.translations().keySet(),
-                    definition.sourceArchive());
+                    definition.styles().keySet(), definition.sourceArchive());
         }
 
         ClothingRegistry.get().freeze();
